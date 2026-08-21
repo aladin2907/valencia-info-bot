@@ -1,0 +1,1315 @@
+{
+  "id": "9yrNjvjMK3JrBBty",
+  "name": "RAG -FLOW",
+  "description": null,
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2592,
+        112
+      ],
+      "id": "d36537cb-acdd-4150-a979-b92762d90840",
+      "name": "info_bot_valencia",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "users_valencia",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('info_bot_valencia').item.json.message.from.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        112
+      ],
+      "id": "c4c4668e-9537-4556-834d-11cf7d90642c",
+      "name": "Get a row",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ee26c734-8d2b-47b7-840f-dee896ee6d7e",
+              "leftValue": "={{ $('Get a row').item.json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1056,
+        112
+      ],
+      "id": "95208138-bceb-46a3-b40c-404499b9f834",
+      "name": "If1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "tableId": "users_valencia",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "id",
+              "fieldValue": "={{ $('info_bot_valencia').item.json.message.from.id }}"
+            },
+            {
+              "fieldId": "username",
+              "fieldValue": "={{ $('info_bot_valencia').item.json.message.from.username }}"
+            },
+            {
+              "fieldId": "first_name",
+              "fieldValue": "={{ $('info_bot_valencia').item.json.message?.from?.first_name\n   ?? $('info_bot_valencia').item.json.chat?.first_name\n   ?? $('info_bot_valencia').item.json.message?.from?.username\n   ?? null }}"
+            },
+            {
+              "fieldId": "last_name",
+              "fieldValue": "={{ $('info_bot_valencia').item.json.message?.from?.last_name ?? null }}"
+            },
+            {
+              "fieldId": "language_code",
+              "fieldValue": "={{ $('info_bot_valencia').item.json.message.from.language_code }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "last_interaction_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "next_allowed_message_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "message_count_today",
+              "fieldValue": "1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        624
+      ],
+      "id": "eca03c56-2a02-474b-bf8e-cbcd0b191700",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $('info_bot_valencia').item.json.message.from.first_name }} !\n{{ $('Merge').item.json.intro_text }}\n",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        624
+      ],
+      "id": "19a0d20d-a132-4656-909e-2dd8f306e981",
+      "name": "Send a text message",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d9c6d26a-35b8-43d9-8c80-5efac9d723ad",
+              "leftValue": "={{ $json.next_allowed_message_at }}",
+              "rightValue": "={{ $now.toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "before"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -816,
+        96
+      ],
+      "id": "077a8221-e2af-4718-9123-ee0077a9cf49",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "tableName": {
+          "__rl": true,
+          "value": "all_valencia_threads",
+          "mode": "list",
+          "cachedResultName": "all_valencia_threads"
+        },
+        "prompt": "={{ $json.choices[0].message.content.key_phrase }}",
+        "topK": 30,
+        "includeDocumentMetadata": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        64
+      ],
+      "id": "c1e5db45-1e4b-496f-a9ac-03d7bb946864",
+      "name": "Supabase Vector Store1",
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        272
+      ],
+      "id": "7f494509-271e-41d4-9fee-d005cc7eaec8",
+      "name": "Embeddings OpenAI6",
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "messages": {
+          "message": [
+            {
+              "content": "=You are a research expert on life in Valencia/Spain. Your task is to create a comprehensive and reliable briefing based on search queries, combining official data with practical experience.\n\nTWO-STAGE TASK:\nSTAGE 1: CONTEXT DEFINITION\nAnalyze the incoming search queries to understand what topic the user is interested in. Summarize this topic briefly. Place this summary into the \"community_experience\" field, as if it were a collective request from the community.\n\nSTAGE 2: INFORMATION SEARCH AND ANALYSIS\nUse a flexible system of sources to collect data, then fill in all fields of the JSON object.\n\nINPUT DATA:\nSearch queries:\n{{ $json.choices[0].message.content.info_for_search }}\n\nSOURCE USAGE RULES:\n\t•\tPRIORITY 1: OFFICIAL SOURCES (for Facts)\n\t•\tWhat: Government websites (.gob.es), regional (.gva.es), municipal (valencia.es), police (policia.es), tax office, immigration office, etc.\n\t•\tWhen to use: Mandatory and exclusively for filling all fields in the official_data section. These must be 100% accurate.\n\t•\tPRIORITY 2: AUTHORITATIVE PRACTICAL SOURCES (for Context)\n\t•\tWhat: Large, reputable expat portals, legal consultancy sites, specialized reputable blogs.\n\t•\tWhen to use: For filling in practice_vs_theory and recommendations. These sources help identify pitfalls, realistic timelines, and life hacks.\n\t•\tPRIORITY 3: REVIEWS (for Service Evaluation)\n\t•\tWhat: Google Maps, Trustpilot, etc. for specific institutions.\n\t•\tWhen to use: For adding details to practice_vs_theory (e.g., “reviews often complain about queues in this office”).\n\nKEY RULES:\n\t•\tCITE FACTS: Every item in official_data must have the structure: { \"text\": \"...\", \"source\": \"URL\" }.\n\t•\tHONESTY RULE: If no reliable information is found, DO NOT invent it. Write: \"Information not found during search\" in the relevant field.\n\nOUTPUT FORMAT:\n{\n  \"community_experience\": \"Here you place the brief summary of the topic identified in Stage 1\",\n  \"verification_status\": \"Confirmed/Partially confirmed/Requires clarification\",\n  \"official_data\": {\n    \"requirements\": { \"text\": \"official requirements\", \"source\": \"URL source\" },\n    \"contacts\": { \"text\": \"addresses, phones, websites\", \"source\": \"URL source\" },\n    \"schedule\": { \"text\": \"working hours\", \"source\": \"URL source\" },\n    \"prices\": { \"text\": \"fees and costs\", \"source\": \"URL source\" },\n    \"documents\": { \"text\": \"required documents\", \"source\": \"URL source\" },\n    \"processing_time\": { \"text\": \"official processing times\", \"source\": \"URL source\" }\n  },\n  \"practice_vs_theory\": \"Discrepancies and practical nuances found in Priority 2 and 3 sources\",\n  \"recommendations\": \"Practical advice based on all analysis\",\n  \"last_updated\": \"date of information verification\",\n  \"sources\": [\"list of all unique URLs used to gather data\"]\n}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.perplexity",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        64
+      ],
+      "id": "90121c27-3fe8-46c4-89e4-13f3e4511d2d",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "perplexityApi": {
+          "name": "Perplexity account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $('info_bot_valencia').item.json.message.message_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        64
+      ],
+      "id": "1cff2807-ebaa-48bb-acb7-1059fe8200f1",
+      "name": "Send a text message2",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "threads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        784,
+        64
+      ],
+      "id": "cfe55eb7-3b10-4963-901c-4f4fa76c53f9",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0cd76541-1daa-47b2-90ba-329ef89f9614",
+              "name": "document.pageContent",
+              "value": "={{ $json.document.pageContent }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        64
+      ],
+      "id": "10cf0d7a-5128-4f4d-9691-104499b892fb",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "users_valencia",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "=eq",
+              "keyValue": "={{ $('info_bot_valencia').item.json.message.from.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "next_allowed_message_at",
+              "fieldValue": "={{ $now.plus({ minutes: 5 }).toISO() }}"
+            },
+            {
+              "fieldId": "last_interaction_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "message_count_today",
+              "fieldValue": "={{ $('Get a row').item.json.message_count_today +1 }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        64
+      ],
+      "id": "73f5ecc6-7ec7-449d-8fd1-5fffe670c053",
+      "name": "Update a row",
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $('Merge').item.json.processing }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        64
+      ],
+      "id": "fed3a7ec-ba18-4b5e-a96f-7ace63b270ce",
+      "name": "Send a text message3",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8ea4a451-6a02-4366-abfc-74e500d8f72c",
+              "leftValue": "={{ $('info_bot_valencia').item.json.message.entities[0].type }}",
+              "rightValue": "bot_command",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -592,
+        80
+      ],
+      "id": "b330e51b-3fff-4a97-810b-931833c0dd2b",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $('Merge').item.json.user_sended_comand }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        240
+      ],
+      "id": "3e3d55c1-3f28-43de-a53e-8fe02a74fbb6",
+      "name": "Send a text message4",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "text",
+              "value": "={{ $json.message.text }}"
+            },
+            {
+              "key": "username",
+              "value": "={{ $json.message.from.username }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        -2352,
+        112
+      ],
+      "id": "46476401-5dde-4050-9431-b0eeaf76b0c9",
+      "name": "Execution Data"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3e3f23b7-d6ca-4000-a1d4-de1c366ee587",
+              "name": "message",
+              "value": "={{ $json.choices[0].message.content.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1936,
+        64
+      ],
+      "id": "13c5ba79-6e9a-4a3d-99e6-ff7a4a43834a",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mode: Run Once for All Items\nconst item0 = ($input.all()[0] || { json: {} }).json;\nconst raw = item0.message ?? item0.text ?? item0?.choices?.[0]?.message?.content?.message ?? '';\n\nfunction cleanTextButKeepUrls(s) {\n  let text = String(s);\n  \n  // Чистим текст ОТ проблемных символов\n  text = text\n    // Заменяем все проблемные кавычки на обычные\n    .replace(/['']/g, \"'\")\n    .replace(/[\"\"]/g, '\"')\n    .replace(/[«»]/g, '\"')\n    // Удаляем эмодзи\n    .replace(/[\\u{1F300}-\\u{1FAFF}]/gu, '')\n    .replace(/[\\u{2600}-\\u{27BF}]/gu, '')\n    // Нормализуем переносы\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/\\r/g, '\\n')\n    // Убираем невидимые символы\n    .replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, '')\n    .replace(/[\\u200B-\\u200F]/g, '')\n    .replace(/[\\u202A-\\u202E]/g, '')\n    .replace(/[\\u2060-\\u206F]/g, '')\n    .replace(/\\uFEFF/g, '')\n    // Заменяем спецсимболы\n    .replace(/\\u00A0/g, ' ')\n    .replace(/\\u00AD/g, '')\n    .replace(/—/g, ' - ')\n    .replace(/–/g, ' - ')\n    // Убираем множественные переносы\n    .replace(/\\n{3,}/g, '\\n\\n');\n  \n  // Оборачиваем каждую ссылку в пробелы и убираем всё после ?\n  text = text.replace(/(https?:\\/\\/[^\\s\"'«»?]+)(\\?[^\\s\"'«»]*)?/gi, (match, base, params) => {\n    return ' ' + base + ' ';\n  });\n  \n  // Убираем множественные пробелы\n  text = text.replace(/[ \\t]+/g, ' ').trim();\n  \n  return text;\n}\n\nlet text = cleanTextButKeepUrls(raw);\n\n// ДИАГНОСТИКА: выводим что на байте 308\nconsole.log('=== ДИАГНОСТИКА ===');\nconsole.log('Длина текста:', text.length);\nconsole.log('Байты 300-320:', Buffer.from(text.slice(300, 320)).toString('hex'));\nconsole.log('Текст 300-320:', text.slice(300, 320));\nconsole.log('Символы 300-320:', text.slice(300, 320).split('').map((c, i) => `${300+i}: ${c} (${c.charCodeAt(0)})`).join('\\n'));\n\n// Чанкинг\nconst SAFE = 4000;\nconst messages = [];\nlet i = 0;\n\nwhile (i < text.length) {\n  let end = Math.min(i + SAFE, text.length);\n  \n  if (end < text.length) {\n    let cut = text.lastIndexOf('\\n', end);\n    if (cut <= i) cut = text.lastIndexOf(' ', end);\n    if (cut > i) end = cut;\n  }\n  \n  const chunk = text.slice(i, end).trim();\n  \n  if (chunk) {\n    messages.push({ json: { text: chunk } });\n  }\n  \n  i = end + 1;\n}\n\nreturn messages.length ? messages : [{ json: { text: '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        64
+      ],
+      "id": "2242fc44-3519-4710-8108-f1740d7f6b3b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Ты — аналитик содержания обсуждений в групповых чатах Валенсии.\nРОЛЬ:\nПредоставляй точную информацию ИСКЛЮЧИТЕЛЬНО на основе содержания обсуждения/треда.\n\nПРАВИЛА:\nИспользуй ТОЛЬКО информацию из предоставленных тредов.\nНЕ добавляй личные знания или интерпретации.\nЕсли релевантная информация отсутствует, верни: \"Эта тема не обсуждалась в этой группе\".\nЦитируй или пересказывай близко к оригинальному тексту, если естиь цитаты по теме - обязательно используй их, но не больше 3-х.\nДОПОЛНИТЕЛЬНАЯ ЗАДАЧА:\nСгенерируй 2-3 поисковых запросов для уточнения или дополнения информации через веб-поиск на испанском языке:\n\nДля проверки фактов из обсуждений.\nДля получения недостающей информации.\nДля обновления устаревших данных.\nФОРМАТ ВЫВОДА:\nJSON\n{\n  \"response_from_it_ua\": \"Информация из тредов или сообщение об отсутствии информации\",\n  \"info_for_search\": [\"запрос 1\", \"запрос 2\", \"запрос 3\"]\n}\nсегодня: {{ $today.format('yyyy-MM-dd') }}",
+              "role": "system"
+            },
+            {
+              "content": "=User query: \n{{ $('info_bot_valencia').item.json.message.text }}\nTreads:\n{{ $json.threads.toJsonString() }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1008,
+        64
+      ],
+      "id": "e05584b7-6853-4b9e-a262-216af5ebf280",
+      "name": "Выделяем с тредов информацию",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.4",
+          "mode": "list",
+          "cachedResultName": "GPT-5.4"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=РОЛЬ\nТы — бот-помощник для Telegram-чата \"Жизнь в Валенсии\". Твоя личность — это опытный и дружелюбный местный житель, который помогает новичкам. Ты пишешь так, как написал бы человек в чате — кратко, по делу и простым языком.\nЯЗЫК ОТВЕТА - тот же на котором задан вопрос, цитаты тоже переводи на язык вопроса !\n\nЗАДАЧА\nИспользуя информацию из Опыта сообщества и Официальных источников, напиши одно цельное сообщение для Telegram-чата, которое отвечает на вопрос пользователя.\n\nВХОДНЫЕ ДАННЫЕ\n\nВопрос пользователя\nОпыт сообщества\nОфициальные источники\n\nГЛАВНЫЕ ПРИНЦИПЫ ОТВЕТА\n\n1. СИНТЕЗ, А НЕ ПЕРЕЧИСЛЕНИЕ. Твоя главная задача — создать единый, связный рассказ. Не делай разделы \"Опыт\" и \"Официально\". Вместо этого, вплетай официальные данные в рассказ, основанный на опыте сообщества.\nХороший пример: \"За устрицами, как говорят в чате, 'лучше всего идти на Центральный рынок'. Особенно хвалят Ostras Pedrín, один из участников писал: 'там всегда свежие и большой выбор'. 📍 Официально рынок находится по адресу Plaza Ciudad de Brujas, s/n, и работает ⏰ с 07:30 до 15:00 с понедельника по субботу.\"\nПлохой пример: \"Опыт: Ostras Pedrín. Официально: Mercado Central, Plaza Ciudad de Brujas, s/n...\"\n2. ПРЯМАЯ РЕЧЬ И ЦИТАТЫ. Чтобы сделать ответ более достоверным и живым, используй прямые цитаты из Опыта сообщества, где это уместно. Оформляй их в кавычках. Выбирай короткие, но содержательные фразы, которые передают суть отзыва или совета.\nХороший пример: \"Насчет парикмахерских мнения разные. Кто-то советует салон X, говорят, что 'стригут быстро и недорого'. А вот отзыв про салон Y: 'была там один раз, больше не пойду, совсем не поняли, что я хочу'.\"\nВажно: Цитируй дословно, но можешь исправлять опечатки, если они мешают пониманию и переводи на язык, на котором задан вопрос.\n3. ПРИОРИТЕТ ЖИВОГО ОПЫТА. Всегда начинай с информации из чата. Если какие-то сведения есть только в опыте сообщества (и нет прямых цитат), обязательно помечай их фразой: \"По опыту участников чата...\".\n4. АБСОЛЮТНАЯ ТОЧНОСТЬ ДЕТАЛЕЙ. Не меняй и не сокращай адреса, телефоны (+34 XXX XXX XXX), ссылки (полный URL), часы работы, цены и списки документов. Копируй их как есть.\n5. ЧЕСТНОСТЬ. Если в предоставленных данных нет ответа, просто напиши: \"Информация не найдена\".\n\nЧЕГО ДЕЛАТЬ НЕЛЬЗЯ (ВАЖНО!)\n\n1. НЕ ИСПОЛЬЗУЙ ЗАГОЛОВКИ. \n2. Никаких \"Опыт сообщества\", \"Официально\", \"Расхождения\", \"Контекст\" и т.п. Только единый текст.\n3. НЕ ПИШИ В ОФИЦИАЛЬНОМ, РОБОТИЗИРОВАННОМ ТОНЕ. Избегай фраз \"согласно официальным данным\", \"требуется наличие лицензии\" и т.д.\n4. НЕ ИСПОЛЬЗУЙ ФОРМАТИРОВАНИЕ. Никаких списков (•), жирного текста, курсива или HTML-тегов (<a href>). Запрещенные символы: * _ [ ] { } < > # @.\n5. НЕ ИСПОЛЬЗУЙ HTML теги для ссылок.\n\nФОРМАТ ВЫВОДА\nВерни ответ в виде JSON-объекта:\n{ \"message\": \"[твой готовый текст для отправки в Telegram]\" }",
+              "role": "system"
+            },
+            {
+              "content": "=User question: \n{{ $('info_bot_valencia').item.json.message.text }}\nChat experience: \n{{ $('Выделяем с тредов информацию').item.json.choices[0].message.content.toJsonString() }}\nOfficial information: \n{{ $json.choices[0].message.content }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1568,
+        64
+      ],
+      "id": "fc7c30be-8692-4239-afb2-1ee4d790b5bc",
+      "name": "Собираем финальный ответ",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $('Merge').item.json.support_request }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $('info_bot_valencia').item.json.message.message_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2816,
+        304
+      ],
+      "id": "a4840f04-d76b-454b-8d02-a1ba1b74fdc0",
+      "name": "Send a text message5",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('info_bot_valencia').item.json.message.from.language_code }}",
+                    "rightValue": "uk",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "5f264088-e011-436b-9559-fe820d77bfe1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "UKR"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c7f72b46-725c-4668-b89c-50237c6b6197",
+                    "leftValue": "=",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -2144,
+        96
+      ],
+      "id": "028ca26b-ed36-4fbe-a98c-459f22c5c057",
+      "name": "Switch",
+      "alwaysOutputData": false,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b2e951c-e8db-4493-985e-566ca03d24ef",
+              "name": "intro_text",
+              "value": "Запитуй, я готовий відповідати. У моїй базі є знання про всі обговорення в найпопулярніших чатах Валенсії! Базу знань постійно поповнюємо. Зараз у базі знань — 39 175 обговорень.\\nТакож я валідуваю інформацію, звіряю її із законами, нормами та офіційними заявами.\\nГотовий допомогти з будь-якого питання!\\nЗапитуй!",
+              "type": "string"
+            },
+            {
+              "id": "97cc9fde-f30b-46d8-8f56-3c6fe4fcbb8a",
+              "name": "server_busy",
+              "value": "🤖 Привіт! Ми отримали твоє повідомлення, але, на жаль, не можемо обробити його прямо зараз. У зв’язку з високим навантаженням на сервер та великою кількістю користувачів ми тимчасово обмежили частоту надсилання повідомлень. ⏳ Будь ласка, зачекай трохи й спробуй знову трохи пізніше. Це допомагає нам підтримувати стабільну роботу сервісу для всіх. Дякуємо за розуміння! 🙌",
+              "type": "string"
+            },
+            {
+              "id": "cce274d2-9d48-4e0e-949c-7798d5530011",
+              "name": "user_sended_comand",
+              "value": "🤖 Привіт! Я побачив бот-команду. Готовий до роботи, ставте запитання 🙌",
+              "type": "string"
+            },
+            {
+              "id": "904d17b8-3c80-4b80-9381-f112125c7762",
+              "name": "processing",
+              "value": "🤖 Привіт! Дякуємо, що ти з нами. Ми отримали твоє повідомлення, починаємо роботу над пошуком інформації, скоро повернемось із відповіддю. Час обробки твого запиту — 3 хвилини.",
+              "type": "string"
+            },
+            {
+              "id": "e2106459-9b66-4e71-baac-aad704bcda2d",
+              "name": "support_request",
+              "value": "Друзі, якщо Valencia Infobot був вам корисний, ви можете підтримати його роботу будь-якою сумою.\n\nКошти підуть на оплату сервера, бази даних і технічну підтримку, щоб бот і надалі стабільно працював для всіх.\n\nBizum: +34666585142  \nКартка Monobank: 4441111022066462  \nНагорна Юлія\n\nДякуємо за будь-яку підтримку 🙌\n\nВаша реклама може бути в цьому повідомленні.  \nЩодо реклами: @valencia_dvizh\n\nДякуємо! 🙏",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1824,
+        112
+      ],
+      "id": "d1f484d4-2a5e-45b9-8b0f-a555c6c705bf",
+      "name": "UKR",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b2e951c-e8db-4493-985e-566ca03d24ef",
+              "name": "intro_text",
+              "value": "👋 Привет! Я помогу тебе разобраться с жизнью в Валенсии 🇪🇸  В моей базе уже 39 175 обсуждений из популярных чатов города — про школы, документы, районы, жильё и многое другое. Информацию я сверяю с законами и официальными источниками ✅  Можешь спрашивать, например: 🏫 Как записать ребёнка в школу? 📄 Какие документы нужны для NIE, ВНЖ или прописки? 📍 Какие районы лучше для жизни или где найти врача?  Спрашивай — я помогу разобраться! 💬",
+              "type": "string"
+            },
+            {
+              "id": "97cc9fde-f30b-46d8-8f56-3c6fe4fcbb8a",
+              "name": "server_busy",
+              "value": "⚙️ Сервер переваривает много запросов 😵‍💫 Вернись чуть позже — всё снова заработает! 🚀 Следующий запрос доступен в ",
+              "type": "string"
+            },
+            {
+              "id": "cce274d2-9d48-4e0e-949c-7798d5530011",
+              "name": "user_sended_comand",
+              "value": "🤖 Команды устарели. Просто напиши — я разберусь 🙌",
+              "type": "string"
+            },
+            {
+              "id": "904d17b8-3c80-4b80-9381-f112125c7762",
+              "name": "processing",
+              "value": "🤖 Ваш запрос получен. Запускаю интеллектуальный поиск и проверку данных — ответ будет готов примерно через 3 минуты. Благодарю за доверие.",
+              "type": "string"
+            },
+            {
+              "id": "e2106459-9b66-4e71-baac-aad704bcda2d",
+              "name": "support_request",
+              "value": "Друзья, если Valencia Infobot был вам полезен, вы можете поддержать его работу любой суммой.\nДеньги пойдут на оплату сервера, базы данных и техническую поддержку, чтобы бот продолжал стабильно работать для всех.\nBizum: +34666585142  \nМонобанк карта: 4441111022066462, \nНагорная Юлия\nСпасибо за любую поддержку 🙌\nВаша реклама может быть в этом сообщении.\nПо поводу рекламы - @valencia_dvizh Спасибо! 🙏",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1824,
+        272
+      ],
+      "id": "6f7136ed-21f9-4ecc-ae9d-f71055a34919",
+      "name": "RU",
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b2e951c-e8db-4493-985e-566ca03d24ef",
+              "name": "intro_text",
+              "value": "Ask, I am ready to answer. My database contains knowledge about all discussions in the most popular Valencia chats! The knowledge base is constantly updated. Currently, it has 39,175 discussions. I also validate information, checking it against laws, regulations, and official statements. Ready to help with any question! Ask!",
+              "type": "string"
+            },
+            {
+              "id": "97cc9fde-f30b-46d8-8f56-3c6fe4fcbb8a",
+              "name": "server_busy",
+              "value": "🤖 Hi! We received your message, but unfortunately we cannot process it right now. Due to high server load and a large number of users, we have temporarily limited the frequency of sending messages. ⏳ Please wait a little and try again later. This helps us keep the service stable for everyone. Thank you for understanding! 🙌",
+              "type": "string"
+            },
+            {
+              "id": "cce274d2-9d48-4e0e-949c-7798d5530011",
+              "name": "user_sended_comand",
+              "value": "🤖 Hi! I saw the bot command. Ready to work, ask your question 🙌",
+              "type": "string"
+            },
+            {
+              "id": "904d17b8-3c80-4b80-9381-f112125c7762",
+              "name": "processing",
+              "value": "🤖 Hi! Thank you for being with us. We received your message and are starting to search for information. We will get back to you soon with an answer. Processing time for your request is 3 minutes.",
+              "type": "string"
+            },
+            {
+              "id": "e2106459-9b66-4e71-baac-aad704bcda2d",
+              "name": "support_request",
+              "value": "Thank you for using the bot. The project is volunteer-based and survives on donations. If you want, support us: Bizum 617537254. For reference: one answer ≈ €0.20. Support reduces limits and speeds up responses for everyone. Share the bot with your friends — that is also a contribution.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "ignoreConversionErrors": true
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1840,
+        -96
+      ],
+      "id": "0f57184d-14cc-46b2-977e-3238f3b6f4bf",
+      "name": "EN",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1536,
+        96
+      ],
+      "id": "cb1f4da2-7e79-40d9-a7eb-a89d164e59c2",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Ты — оптимизатор запросов для векторного поиска по обсуждениям в Telegram-группе.\n\nЦЕЛЬ:\nМаксимально сузить поиск по тредам. Сохранить смысл исходного запроса. Не расширять искусственно.\n\nЧТО ДЕЛАТЬ:\n\nОпредели язык исходного текста (ru/uk).\nОчисти вход от вводных/пустых слов: \"подскажите\", \"скажите\", \"пожалуйста\", \"кто знает\", \"нужно\", \"хочу\", \"можно ли\" и т.п.\nИсправь явные опечатки и слитные/раздельные пробелы.\nСохрани ключевые термины, имена, @юзернеймы, #хэштеги, даты, адреса, телефоны, ссылки.\nУдали чрезмерно общие слова, если они не уточняют смысл (например: игра/ивент/встреча/онлайн/офлайн/услуги), НО оставь, если они есть во входе и важны для темы.\nЯЗЫК: используй только кириллицу (ru/uk). Не добавляй латиницу и транслитерации. Сохраняй спецсимволы из входа (@, #, URL).\nСгенерируй три варианта одной и той же фразы:\nочищенный вариант на языке входа,\nвариант по-русски,\nвариант по-украински.\nСобери уникальные слова/фразы из этих трёх вариантов в один список, убери дубликаты, сохрани порядок «очищенный→ru→uk».\nФОРМАТ ВЫВОДА (НЕ МЕНЯТЬ НАЗВАНИЯ ПОЛЕЙ):\n\ncode\nJSON\n{\n  \"key_phrase\": \"<очищенный_вариант + русская_версия + украинская_версия>\",\n  \"language_code\": \"<ru или uk>\"\n}\nПРИМЕР 1:\n\nВХОД: \"Подскажите, пожалуйста, где поиграть в мафию в Валенсии?\"\nВЫХОД:\ncode\nJSON\n{\n  \"key_phrase\": \"где поиграть в мафию в Валенсии де пограти в мафію у Валенсії\",\n  \"language_code\": \"ru\"\n}\nПРИМЕР 2:\n\nВХОД: \"Привіт, хто знає, де можна поремонтувати ноут в Аліканте?\"\nВЫХОД:\ncode\nJSON\n{\n  \"key_phrase\": \"де можна поремонтувати ноут в Аліканте где можно починить ноут в Аликанте\",\n  \"language_code\": \"uk\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "=Текст: \n{{ $('info_bot_valencia').item.json.message.text }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -144,
+        64
+      ],
+      "id": "7396c5d7-5eeb-4a27-a553-dc24a0f16bf1",
+      "name": "Message a model1",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "={{ $('Merge').item.json.server_busy }}{{ DateTime.fromISO($('Get a row').item.json.next_allowed_message_at).setZone('Europe/Madrid').format(\"HH:mm\") }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        432
+      ],
+      "id": "3fefcff1-acab-47fc-8d3f-9aeca63cb1fe",
+      "name": "Server buisy",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "=analize telegram groups....",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        -144
+      ],
+      "id": "0afd80d2-c63a-4e14-ac4c-7c032d134d13",
+      "name": "Server buisy1",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "=web search on oficial information....",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1408,
+        -144
+      ],
+      "id": "3983984c-22a1-457a-b052-d37737295c1f",
+      "name": "Server buisy2",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('info_bot_valencia').item.json.message.chat.id }}",
+        "text": "=validate information....",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1696,
+        -144
+      ],
+      "id": "0efca27e-903f-4ed2-b9de-5bc87442c1c1",
+      "name": "Server buisy3",
+      "credentials": {
+        "telegramApi": {
+          "name": "Info_bot_valencia"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "info_bot_valencia": {
+      "main": [
+        [
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Server buisy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI6": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Собираем финальный ответ",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Server buisy3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message2": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a text message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Выделяем с тредов информацию",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Server buisy1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message3": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Выделяем с тредов информацию": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Server buisy2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Собираем финальный ответ": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message5": {
+      "main": [
+        []
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "UKR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Data": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UKR": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RU": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "EN": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Get a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ptkG7VYqHjLDrrGc",
+    "binaryMode": "separate"
+  }
+}
