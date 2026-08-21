@@ -34,14 +34,24 @@ RETURNS TABLE (
 LANGUAGE sql
 AS $$
 WITH
+-- Запрос строится как OR по леммам, а не AND: вопрос пользователя — это целая
+-- фраза ("подскажите, как записать ребёнка в школу"), и требование наличия ВСЕХ
+-- слов не находит ничего. ts_rank_cd всё равно поднимет треды с большим
+-- совпадением. Проверено замером: с AND полнотекстовая ветка молчала.
+q AS (
+    SELECT (SELECT string_agg(lex, ' | ')
+            FROM unnest(tsvector_to_array(to_tsvector('russian', coalesce(query_text, '')))) AS lex
+           )::tsquery AS tsq
+),
 full_text AS (
     SELECT t.id,
            row_number() OVER (
-               ORDER BY ts_rank_cd(t.tsv, websearch_to_tsquery('russian', query_text)) DESC
+               ORDER BY ts_rank_cd(t.tsv, (SELECT tsq FROM q)) DESC
            ) AS rank_ix
     FROM threads t
     WHERE query_text IS NOT NULL
-      AND t.tsv @@ websearch_to_tsquery('russian', query_text)
+      AND (SELECT tsq FROM q) IS NOT NULL
+      AND t.tsv @@ (SELECT tsq FROM q)
       AND (filter_groups IS NULL OR t.group_slug = ANY (filter_groups))
       AND (date_from IS NULL OR t.last_activity_at >= date_from)
       AND (date_to   IS NULL OR t.last_activity_at <= date_to)

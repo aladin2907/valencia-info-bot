@@ -59,11 +59,13 @@ def main():
             return
 
         model = SentenceTransformer(MODEL_ID, device="mps", trust_remote_code=True)
+        # окно 1024 токенов: покрывает почти все треды целиком и вдвое быстрее 8192
+        model.max_seq_length = int(os.getenv("MAX_SEQ_LEN", "1024"))
         B = 256
         for i in range(0, len(todo), B):
             chunk = todo[i:i + B]
             vecs = model.encode([DOC_PREFIX + r["content"][:4000] for r in chunk],
-                                batch_size=16, normalize_embeddings=True)
+                                batch_size=32, normalize_embeddings=True)
             with conn.cursor() as c2:
                 for r, v in zip(chunk, vecs):
                     c2.execute(
