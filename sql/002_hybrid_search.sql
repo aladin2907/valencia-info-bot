@@ -9,7 +9,7 @@
 
 CREATE OR REPLACE FUNCTION hybrid_search(
     query_text       text,
-    query_embedding  vector(1536),
+    query_embedding  vector(1024),
     match_count      int     DEFAULT 50,
     full_text_weight float   DEFAULT 1.0,
     semantic_weight  float   DEFAULT 1.0,
@@ -89,7 +89,7 @@ $$;
 -- Подбор актуальных фактов по теме вопроса.
 -- Отдаёт только не погашенные факты (invalid_at IS NULL).
 CREATE OR REPLACE FUNCTION match_facts(
-    query_embedding vector(1536),
+    query_embedding vector(1024),
     match_count     int   DEFAULT 10,
     min_similarity  float DEFAULT 0.35,
     as_of           timestamptz DEFAULT NULL   -- «как было летом»: срез на дату

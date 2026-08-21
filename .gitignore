@@ -9,3 +9,5 @@ sessions/
 data/
 *.log
 legacy/
+eval/dataset.json
+eval/eval_*.json

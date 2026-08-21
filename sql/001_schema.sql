@@ -59,10 +59,10 @@ CREATE INDEX IF NOT EXISTS threads_group_idx ON threads (group_slug);
 -- строки со status='pending' просто пересчитываются следующей ночью.
 CREATE TABLE IF NOT EXISTS thread_embeddings (
     thread_id     bigint      NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-    model         text        NOT NULL DEFAULT 'text-embedding-3-small',
-    dimensions    int         NOT NULL DEFAULT 1536,
+    model         text        NOT NULL DEFAULT 'bge-m3',
+    dimensions    int         NOT NULL DEFAULT 1024,
     source_hash   text        NOT NULL,          -- от какого текста посчитан вектор
-    embedding     vector(1536),
+    embedding     vector(1024),
     status        text        NOT NULL DEFAULT 'pending'
                   CHECK (status IN ('pending', 'ready', 'failed')),
     attempt_count int         NOT NULL DEFAULT 0,
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS facts (
     -- не конкурирует и просто сосуществует с другими (см. ARCHITECTURE.md §3.3).
     fact_key          text,
     statement         text        NOT NULL,
-    embedding         vector(1536),
+    embedding         vector(1024),
     valid_from        timestamptz NOT NULL,
     invalid_at        timestamptz,                  -- NULL = факт актуален
     superseded_by     bigint      REFERENCES facts(id) ON DELETE SET NULL,

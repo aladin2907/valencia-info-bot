@@ -84,7 +84,7 @@ threads_embeddings (                           -- отдельная табли�
   thread_id FK ON DELETE CASCADE,
   model text, dimensions int,                  -- можно держать две модели параллельно
   source_hash text,                            -- от какого текста посчитан
-  embedding vector(1536),
+  embedding vector(1024),
   status text, attempt_count int, last_error text   -- очередь пересчёта с ретраями
 )
 ```
