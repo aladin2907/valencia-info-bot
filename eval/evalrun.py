@@ -5,7 +5,7 @@
     python evalrun.py --name r2-hybrid --vector --fts
     python evalrun.py --name r3-rerank --vector --fts --rerank
 """
-import argparse, json, os, pathlib, re, statistics, time
+import argparse, json, os, pathlib, random, re, statistics, threading, time
 from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 
@@ -31,16 +31,21 @@ def llm(prompt, system="", max_tokens=1500, temperature=0.2):
     req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions", data=body,
                                  headers={"Authorization": f"Bearer {KEY}",
                                           "Content-Type": "application/json"})
-    for a in range(4):
+    for a in range(6):
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 d = json.loads(r.read())
             c = d["choices"][0]["message"]["content"]
             if c:
                 return c
+            time.sleep(2 + a * 3)
         except Exception as e:
-            if a == 3:
+            # 429 — упёрлись в лимит: ждём с нарастающей паузой, иначе повтор
+            # прилетает в тот же лимит и весь раунд обнуляется
+            wait = min(60, 5 * (2 ** a)) + random.uniform(0, 3)
+            if a == 5:
                 return f"__ERROR__ {e}"
+            time.sleep(wait)
     return "__ERROR__"
 
 
@@ -103,7 +108,7 @@ def retrieve(cfg, query_text, emb):
                FROM hybrid_search(%s, %s::vector, %s, %s, %s, 50, %s, %s)""",
             (query_text if cfg["fts"] else None,
              str(emb.tolist()) if cfg["vector"] else None,
-             cfg["pool"], 1.0 if cfg["fts"] else 0.0, 1.0 if cfg["vector"] else 0.0,
+             cfg["pool"], cfg["ftsw"] if cfg["fts"] else 0.0, 1.0 if cfg["vector"] else 0.0,
              365.0 if cfg["recency"] else 1e9, 0.6 if cfg["recency"] else 1.0))
         return cur.fetchall()
 
@@ -119,16 +124,28 @@ def gold_ids(cases):
         return out
 
 
+def cache_path(name):
+    return HERE / f"cache_{name}.json"
+
+
 def answer_and_judge(args):
-    case, rows, cfg = args
+    case, rows, cfg, cache, lock = args
+    key = case["question"][:120]
+    with lock:
+        if key in cache:
+            return cache[key]["ans"], cache[key]["j"]
     ctx = "\n\n---\n\n".join(
         f"[обсуждение от {r['last_activity_at'].date()}]\n{r['content'][:2500]}"
         for r in rows[:cfg["ctx"]])
     ans = llm(f"Вопрос: {case['question']}\n\nОбсуждения:\n{ctx}",
-              system=ANSWER_SYS, max_tokens=1200)
+              system=ANSWER_SYS, max_tokens=3000)
     j = jparse(llm(f"Вопрос: {case['question']}\n\nЭталонные факты:\n" +
                    "\n".join(f"- {g}" for g in case["gold_points"]) +
                    f"\n\nОтвет бота:\n{ans}", system=JUDGE_SYS, max_tokens=900)) or {}
+    if not ans.startswith("__ERROR__") and j:
+        with lock:
+            cache[key] = {"ans": ans, "j": j}
+            json.dump(cache, open(cache_path(cfg["name"]), "w"), ensure_ascii=False)
     return ans, j
 
 
@@ -143,19 +160,24 @@ def main():
     ap.add_argument("--pool", type=int, default=50)
     ap.add_argument("--topk", type=int, default=15)
     ap.add_argument("--ctx", type=int, default=8)
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--ftsw", type=float, default=1.0)
+    ap.add_argument("--offset", type=int, default=0)
     a = ap.parse_args()
     cfg = dict(vector=a.vector, fts=a.fts, rerank=a.rerank, rewrite=a.rewrite,
-               recency=a.recency, pool=a.pool, topk=a.topk, ctx=a.ctx,
+               recency=a.recency, pool=a.pool, topk=a.topk, ctx=a.ctx, ftsw=a.ftsw, name=a.name,
                embed_model=EMBED_MODEL)
 
     cases = json.load(open(HERE / "dataset.json", encoding="utf-8"))
+    if a.offset or a.limit:
+        cases = cases[a.offset:(a.offset + a.limit) if a.limit else None]
     print(f"[{a.name}] вопросов: {len(cases)} | {cfg}", flush=True)
     t0 = time.time()
 
     # 1. переформулировка запросов (сеть)
     queries = [c["question"] for c in cases]
     if cfg["rewrite"]:
-        with ThreadPoolExecutor(max_workers=10) as ex:
+        with ThreadPoolExecutor(max_workers=5) as ex:
             rw = list(ex.map(lambda q: jparse(llm(f"Текст: {q}", system=REWRITE_SYS,
                                                   max_tokens=500)), queries))
         queries = [(r or {}).get("key_phrase") or q for r, q in zip(rw, queries)]
@@ -187,8 +209,14 @@ def main():
         ranks.append(ids.index(g) + 1 if g in ids else None)
 
     # 6. ответ + оценка (сеть)
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        aj = list(ex.map(answer_and_judge, [(c, t, cfg) for c, t in zip(cases, tops)]))
+    cache = {}
+    if cache_path(a.name).exists():
+        cache = json.load(open(cache_path(a.name), encoding="utf-8"))
+        print(f"  из кэша: {len(cache)}", flush=True)
+    lock = threading.Lock()
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        aj = list(ex.map(answer_and_judge,
+                         [(c, t, cfg, cache, lock) for c, t in zip(cases, tops)]))
 
     res = []
     for c, rank, (ans, j), rows in zip(cases, ranks, aj, tops):

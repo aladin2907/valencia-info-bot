@@ -1,0 +1,110 @@
+{
+ "r1-vector": {
+  "cfg": {
+   "vector": true,
+   "fts": false,
+   "rerank": false,
+   "rewrite": false,
+   "recency": false,
+   "pool": 50,
+   "topk": 15,
+   "ctx": 8,
+   "embed_model": "BAAI/bge-m3"
+  },
+  "n": 50,
+  "recall@5": 0.66,
+  "recall@15": 0.8,
+  "mrr": 0.584,
+  "answer_score": 3.39,
+  "good_answers": 0.667,
+  "fact_coverage": 0.645,
+  "hallucinations": 3
+ },
+ "r2-hybrid": {
+  "cfg": {
+   "vector": true,
+   "fts": true,
+   "rerank": false,
+   "rewrite": false,
+   "recency": false,
+   "pool": 50,
+   "topk": 15,
+   "ctx": 8,
+   "embed_model": "BAAI/bge-m3"
+  },
+  "n": 50,
+  "recall@5": 0.36,
+  "recall@15": 0.58,
+  "mrr": 0.228,
+  "answer_score": 2.32,
+  "good_answers": 0.318,
+  "fact_coverage": 0.402,
+  "hallucinations": 2
+ },
+ "r3-rerank": {
+  "cfg": {
+   "vector": true,
+   "fts": false,
+   "rerank": true,
+   "rewrite": false,
+   "recency": false,
+   "pool": 50,
+   "topk": 15,
+   "ctx": 8,
+   "embed_model": "BAAI/bge-m3"
+  },
+  "n": 50,
+  "recall@5": 0.72,
+  "recall@15": 0.84,
+  "mrr": 0.609,
+  "answer_score": 3.81,
+  "good_answers": 0.667,
+  "fact_coverage": 0.744,
+  "hallucinations": 1
+ },
+ "r4-hybrid-rerank": {
+  "cfg": {
+   "vector": true,
+   "fts": true,
+   "rerank": true,
+   "rewrite": false,
+   "recency": false,
+   "pool": 80,
+   "topk": 15,
+   "ctx": 8,
+   "ftsw": 0.3,
+   "embed_model": "BAAI/bge-m3"
+  },
+  "n": 50,
+  "recall@5": 0.72,
+  "recall@15": 0.84,
+  "mrr": 0.609,
+  "answer_score": null,
+  "good_answers": null,
+  "fact_coverage": null,
+  "hallucinations": 0
+ },
+ "r5-notrunc": {
+  "cfg": {
+   "vector": true,
+   "fts": false,
+   "rerank": true,
+   "rewrite": false,
+   "recency": false,
+   "pool": 50,
+   "topk": 15,
+   "ctx": 8,
+   "ftsw": 1.0,
+   "name": "r5-notrunc",
+   "embed_model": "BAAI/bge-m3"
+  },
+  "n": 50,
+  "recall@5": 0.72,
+  "recall@15": 0.84,
+  "mrr": 0.609,
+  "answer_score": 3.69,
+  "good_answers": 0.694,
+  "fact_coverage": 0.706,
+  "hallucinations": 3
+ }
+}
