@@ -54,7 +54,9 @@ USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", False)
 USE_RECENCY = _b("USE_RECENCY", False)
 RECENCY_HALF_LIFE_DAYS = _f("RECENCY_HALF_LIFE_DAYS", 365.0)
 RECENCY_FLOOR = _f("RECENCY_FLOOR", 0.6)
-USE_FACTS = _b("USE_FACTS", False)
+# Слой фактов (таблица facts, функция match_facts) в схеме есть, но пока никем
+# не наполняется — флага для него нет намеренно: переключатель, который ничего
+# не включает, хуже его отсутствия. Появится ночное извлечение фактов — появится флаг.
 
 # --- бот --------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
