@@ -7,11 +7,29 @@ import psycopg
 from psycopg.rows import dict_row
 from sentence_transformers import SentenceTransformer
 
-ROOT = pathlib.Path("/Users/macbook/PetProjects/valencia_info_bot")
-DSN = os.getenv("DATABASE_URL", "postgresql://valencia:test@localhost:55433/valencia")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DSN = os.getenv("DATABASE_URL", "postgresql://valencia:valencia_local@localhost:55432/valencia")
 MODEL_ID = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
 DOC_PREFIX = os.getenv("DOC_PREFIX", "")
 GROUPS = ["valencia_parents_kids_schools", "it_ua_valencia", "matusi_valencia"]
+
+def _device() -> str:
+    """cuda → mps → cpu; переопределяется переменной DEVICE."""
+    if os.getenv("DEVICE"):
+        return os.environ["DEVICE"]
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
+DEVICE = _device()
+
 
 
 def parse_date(v):
@@ -58,7 +76,7 @@ def main():
         if not todo:
             return
 
-        model = SentenceTransformer(MODEL_ID, device="mps", trust_remote_code=True)
+        model = SentenceTransformer(MODEL_ID, device=DEVICE, trust_remote_code=True)
         # окно 1024 токенов: покрывает почти все треды целиком и вдвое быстрее 8192
         model.max_seq_length = int(os.getenv("MAX_SEQ_LEN", "1024"))
         B = 256

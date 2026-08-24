@@ -12,7 +12,7 @@ import json, os, re, pathlib, random
 from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 
-ROOT = pathlib.Path("/Users/macbook/PetProjects/valencia_info_bot")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = pathlib.Path(__file__).parent
 MODEL = "stealth/ox-alpha"
 KEY = next(l.split("=", 1)[1].strip() for l in open(ROOT / ".env")

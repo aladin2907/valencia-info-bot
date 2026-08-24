@@ -13,14 +13,32 @@ import psycopg
 from psycopg.rows import dict_row
 
 HERE = pathlib.Path(__file__).parent
-ROOT = pathlib.Path("/Users/macbook/PetProjects/valencia_info_bot")
-DSN = os.getenv("DATABASE_URL", "postgresql://valencia:test@localhost:55433/valencia")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DSN = os.getenv("DATABASE_URL", "postgresql://valencia:valencia_local@localhost:55432/valencia")
 LLM_MODEL = "stealth/ox-alpha"
 KEY = next(l.split("=", 1)[1].strip() for l in open(ROOT / ".env")
            if l.startswith("OPENROUTER_API_KEY="))
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
 QUERY_PREFIX = os.getenv("QUERY_PREFIX", "")
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+
+def _device() -> str:
+    """cuda → mps → cpu; переопределяется переменной DEVICE."""
+    if os.getenv("DEVICE"):
+        return os.environ["DEVICE"]
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
+DEVICE = _device()
+
 
 
 def llm(prompt, system="", max_tokens=1500, temperature=0.2):
@@ -89,7 +107,7 @@ def embed(texts):
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
-        _embedder = SentenceTransformer(EMBED_MODEL, device="mps", trust_remote_code=True)
+        _embedder = SentenceTransformer(EMBED_MODEL, device=DEVICE, trust_remote_code=True)
     return _embedder.encode(texts, batch_size=8, normalize_embeddings=True)
 
 
@@ -97,7 +115,7 @@ def rerank_batch(pairs):
     global _reranker
     if _reranker is None:
         from sentence_transformers import CrossEncoder
-        _reranker = CrossEncoder(RERANK_MODEL, device="mps", trust_remote_code=True)
+        _reranker = CrossEncoder(RERANK_MODEL, device=DEVICE, trust_remote_code=True)
     return _reranker.predict(pairs, batch_size=8)
 
 
