@@ -70,7 +70,10 @@ def search(question: str, top_k: int | None = None,
         scores = models_client.rerank(question, [t.content for t in threads])
         for t, s in zip(threads, scores):
             t.rerank_score = s
-        threads.sort(key=lambda t: t.rerank_score, reverse=True)
+        # если реранкер вернул меньше оценок, чем кандидатов, безоценочные
+        # уходят в конец, а не роняют сортировку
+        threads.sort(key=lambda t: (t.rerank_score if t.rerank_score is not None
+                                    else float("-inf")), reverse=True)
 
     return Retrieved(threads=threads[:top_k], pool_size=len(rows))
 
