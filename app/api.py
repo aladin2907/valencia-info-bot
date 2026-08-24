@@ -1,6 +1,6 @@
 """HTTP-ядро. Telegram-бот и мобильное приложение — два равноправных клиента."""
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -62,20 +62,25 @@ def stats():
 
 
 def _rate_limit(platform: str, external_id: str) -> tuple[int, int]:
-    """Возвращает (user_id, сколько секунд ждать). 0 — можно отвечать."""
-    now = datetime.now(timezone.utc)
+    """Возвращает (user_id, сколько секунд ждать). 0 — можно отвечать.
+
+    Разница считается целиком в SQL. Если сравнивать время базы со временем
+    приложения, новый пользователь получает отказ на первом же вопросе: строка
+    создаётся временем базы, а оно всегда чуть позже снятого в приложении.
+    """
     rows = db.query(
         """INSERT INTO users (platform, external_id)
            VALUES (%s, %s)
            ON CONFLICT (platform, external_id) DO UPDATE
              SET last_interaction_at = now()
-           RETURNING id, next_allowed_message_at""",
+           RETURNING id,
+                     greatest(0, ceil(extract(epoch FROM
+                         (next_allowed_message_at - now()))))::int AS wait""",
         (platform, external_id),
     )
     user = rows[0]
-    wait = (user["next_allowed_message_at"] - now).total_seconds()
-    if wait > 0:
-        return user["id"], int(wait) + 1
+    if user["wait"] > 0:
+        return user["id"], user["wait"]
     db.execute(
         """UPDATE users
               SET next_allowed_message_at = now() + %s::interval,
