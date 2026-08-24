@@ -1,22 +1,100 @@
+# Стек приложения: модели, API, бот. База — отдельно.
+#
+#   локально:        docker compose --profile local up -d      (поднимет и свой Postgres)
+#   на сервере:      docker compose up -d                      (база — Supabase, см. docs/DEPLOY.md)
+#   ночной прогон:   docker compose run --rm ingest
+#
+# Порты на хосте смещены (54322/8080/8081), чтобы не конфликтовать с чужими
+# контейнерами Postgres и Supabase на той же машине.
+
 services:
   db:
+    profiles: ["local"]
     image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-valencia}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # пароль по умолчанию — только для локальной разработки: база слушает
+      # 127.0.0.1 и наружу не смотрит. На сервере база своя (Supabase), см. DEPLOY.md
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-valencia_local}
       POSTGRES_DB: ${POSTGRES_DB:-valencia}
     volumes:
       - pgdata:/var/lib/postgresql/data
       # схема и функции применяются автоматически при первом старте
       - ./sql:/docker-entrypoint-initdb.d:ro
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:54322:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-valencia} -d ${POSTGRES_DB:-valencia}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  models:
+    build: ./models
+    restart: unless-stopped
+    environment:
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      MAX_SEQ_LEN: ${MAX_SEQ_LEN:-1024}
+      DEVICE: ${DEVICE:-}
+    volumes:
+      # веса моделей (~2.5 ГБ) — в томе, иначе качаются заново при каждом пересоздании
+      - models_cache:/models-cache
+    ports:
+      - "127.0.0.1:8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,json; \
+              d=json.load(urllib.request.urlopen('http://localhost:8081/health')); \
+              exit(0 if d['status']=='ok' else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://valencia:valencia_local@db:5432/valencia}
+      MODELS_URL: http://models:8081
+    depends_on:
+      models:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; \
+              urllib.request.urlopen('http://localhost:8080/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      API_URL: http://api:8080
+    depends_on:
+      - api
+    command: ["python", "-m", "bot.main"]
+
+  # Ночной прогон. Разово: docker compose run --rm ingest
+  # По расписанию — cron на хосте, см. docs/DEPLOY.md
+  ingest:
+    profiles: ["manual"]
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://valencia:valencia_local@db:5432/valencia}
+      MODELS_URL: http://models:8081
+    volumes:
+      - ./sessions:/srv/sessions   # Telethon-сессия должна переживать перезапуск
+      - ./data:/srv/data:ro        # выгрузки чатов, если грузим из файлов
+    command: ["python", "-m", "ingest.nightly"]
+
 volumes:
   pgdata:
+  models_cache:

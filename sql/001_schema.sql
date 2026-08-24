@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS threads_tsv_idx ON threads USING gin (tsv);
 CREATE INDEX IF NOT EXISTS threads_activity_idx ON threads (last_activity_at DESC);
 CREATE INDEX IF NOT EXISTS threads_group_idx ON threads (group_slug);
 
--- Эмбеддинги вынесены отдельно: смена модели или сбой OpenAI не трогают данные,
+-- Эмбеддинги вынесены отдельно: смена модели или её сбой не трогают данные,
 -- строки со status='pending' просто пересчитываются следующей ночью.
 CREATE TABLE IF NOT EXISTS thread_embeddings (
     thread_id     bigint      NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
