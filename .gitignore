@@ -11,3 +11,4 @@ data/
 legacy/
 eval/dataset.json
 eval/eval_*.json
+logs/

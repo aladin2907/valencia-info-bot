@@ -60,6 +60,13 @@ cp .env.example .env    # заполнить: DATABASE_URL, OPENROUTER_API_KEY, 
 `DATABASE_URL` при Supabase-стеке рядом: `postgresql://postgres:<POSTGRES_PASSWORD>@172.17.0.1:5432/postgres`
 (адрес `172.17.0.1` — это хост со стороны контейнера; проверь `docker network inspect bridge`).
 
+Если аутентификация не проходит: в самоподнятом Supabase порт публикует не сам
+Postgres, а пулер (supavisor), и имя пользователя там может требовать вид
+`postgres.<POOLER_TENANT_ID>` — значение лежит в `supabase-stack/docker/.env`.
+Либо опубликуй порт `db` напрямую и ходи в него. Схему и функцию поиска мы
+проверили на образе Postgres от Supabase (17.6) — они применяются без правок;
+сетевую часть полного стека проверь на месте.
+
 Скрипт идемпотентный, можно гонять повторно — например, после обновления
 `sql/002_hybrid_search.sql`.
 
@@ -104,6 +111,7 @@ docker compose run --rm ingest python -m ingest.nightly --since-days 90
 ## 6. Ночной прогон
 
 ```bash
+mkdir -p ~/valencia-info-bot/logs
 crontab -e
 ```
 

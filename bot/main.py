@@ -11,6 +11,7 @@ import logging
 
 import httpx
 from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
@@ -45,6 +46,17 @@ def format_sources(sources: list[dict]) -> str:
         if links else ""
 
 
+async def send_answer(msg: Message, text: str) -> None:
+    """В ответах живой текст из чата: подчёркивания в ссылках, звёздочки, скобки.
+    Telegram на таком спотыкается — если разметка не разобралась, шлём как есть,
+    чем терять готовый ответ."""
+    for chunk in [text[i:i + 4000] for i in range(0, len(text), 4000)] or [text]:
+        try:
+            await msg.answer(chunk, parse_mode="Markdown", disable_web_page_preview=True)
+        except TelegramBadRequest:
+            await msg.answer(chunk, disable_web_page_preview=True)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not config.TELEGRAM_BOT_TOKEN:
@@ -66,8 +78,7 @@ async def main() -> None:
             log.warning("ask failed: %s", e)
             await msg.answer(BUSY)
             return
-        await msg.answer(answer + format_sources(sources),
-                         parse_mode="Markdown", disable_web_page_preview=True)
+        await send_answer(msg, answer + format_sources(sources))
 
     log.info("бот запущен, API: %s", config.API_URL)
     await dp.start_polling(bot)

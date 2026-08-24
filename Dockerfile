@@ -12,5 +12,7 @@ COPY scripts/ scripts/
 COPY sql/ sql/
 
 ENV PYTHONUNBUFFERED=1
+# чтобы `python scripts/...` видел пакеты app/ и ingest/
+ENV PYTHONPATH=/srv
 EXPOSE 8080
 CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8080"]

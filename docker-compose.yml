@@ -23,7 +23,7 @@ services:
       # схема и функции применяются автоматически при первом старте
       - ./sql:/docker-entrypoint-initdb.d:ro
     ports:
-      - "127.0.0.1:54322:5432"
+      - "127.0.0.1:55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-valencia} -d ${POSTGRES_DB:-valencia}"]
       interval: 10s
@@ -73,7 +73,9 @@ services:
 
   bot:
     build: .
-    restart: unless-stopped
+    # не unless-stopped: без токена бот не поднимется никогда, и бесконечный
+    # цикл перезапусков только засоряет логи
+    restart: on-failure:5
     env_file: .env
     environment:
       API_URL: http://api:8080
@@ -87,6 +89,9 @@ services:
     profiles: ["manual"]
     build: .
     env_file: .env
+    depends_on:
+      models:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://valencia:valencia_local@db:5432/valencia}
       MODELS_URL: http://models:8081
