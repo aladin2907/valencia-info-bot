@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Telegram-бот — первый клиент API. Всю логику делает API, бот только носит текст.
 
-Запускать с ТЕСТОВЫМ токеном: боевой бот сейчас висит на старом n8n-workflow,
-и трогать его нельзя, пока новый стек не проверен.
+На боевом токене сейчас висит старый n8n-workflow. Бот проверяет это при старте
+и не запускается, пока webhook чужой, — чтобы не сломать работающего бота.
 
     TELEGRAM_BOT_TOKEN=... API_URL=http://localhost:8080 python -m bot.main
 """
@@ -79,6 +79,19 @@ async def main() -> None:
             await msg.answer(BUSY)
             return
         await send_answer(msg, answer + format_sources(sources))
+
+    hook = await bot.get_webhook_info()
+    if hook.url:
+        if not config.ALLOW_WEBHOOK_TAKEOVER:
+            await bot.session.close()
+            raise SystemExit(
+                f"На этом токене уже висит webhook: {hook.url}\n"
+                "Значит, бот сейчас работает через n8n. Не запускаюсь, чтобы его не сломать.\n"
+                "Осознанное переключение: выключить workflow в n8n, затем "
+                "ALLOW_WEBHOOK_TAKEOVER=1."
+            )
+        log.warning("снимаю чужой webhook %s — переключение разрешено флагом", hook.url)
+        await bot.delete_webhook(drop_pending_updates=True)
 
     log.info("бот запущен, API: %s", config.API_URL)
     await dp.start_polling(bot)

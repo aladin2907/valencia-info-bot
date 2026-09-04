@@ -60,6 +60,9 @@ RECENCY_FLOOR = _f("RECENCY_FLOOR", 0.6)
 
 # --- бот --------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+# Токен боевого бота сейчас занят n8n-workflow. Бот не снимет чужой webhook сам:
+# переключение — осознанное действие, не побочный эффект запуска.
+ALLOW_WEBHOOK_TAKEOVER = _b("ALLOW_WEBHOOK_TAKEOVER", False)
 API_URL = os.getenv("API_URL", "http://localhost:8080")
 RATE_LIMIT_SECONDS = _i("RATE_LIMIT_SECONDS", 300)
 
