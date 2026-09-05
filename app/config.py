@@ -39,15 +39,23 @@ LLM_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("LLM_API_KEY", "")
 LLM_MODEL = os.getenv("OPENROUTER_MODEL") or os.getenv("LLM_MODEL", "stealth/ox-alpha")
 LLM_TIMEOUT = _f("LLM_TIMEOUT", 300.0)
 
-# --- поиск: измеренная конфигурация -----------------------------------------
+# --- поиск -------------------------------------------------------------------
 POOL_SIZE = _i("POOL_SIZE", 50)          # кандидатов из базы
-CONTEXT_THREADS = _i("CONTEXT_THREADS", 8)  # сколько тредов уходит в ответ
+# 30 тредов в ответе — решение владельца (05.09.2026). Замер был на 8; при 30
+# из пула в 50 реранкер отсеивает лишь двоих из трёх, то есть работает вполсилы.
+# Вернуть его влияние можно, подняв POOL_SIZE до 100 — ценой времени ответа.
+CONTEXT_THREADS = _i("CONTEXT_THREADS", 30)
 ANSWER_MAX_TOKENS = _i("ANSWER_MAX_TOKENS", 3000)  # с 1200 ответы обрывались
 THREAD_CHARS = _i("THREAD_CHARS", 2500)  # обрезка треда в промпте
+# Треды в промпте идут от свежих к старым, а не по релевантности: так модель
+# видит, что новее, и не выдаёт прошлогоднюю цену за сегодняшнюю.
+CONTEXT_SORT_BY_DATE = _b("CONTEXT_SORT_BY_DATE", True)
 
 USE_RERANK = _b("USE_RERANK", True)      # главный рычаг качества, раунд 3
-USE_FTS = _b("USE_FTS", False)           # замер: пользы нет, раунды 2 и 4
-FTS_WEIGHT = _f("FTS_WEIGHT", 0.0)
+# Гибридный поиск включён по решению владельца. Вес 0.3 — измеренный безвредный:
+# при равном весе выдача была вдвое хуже (раунд 2), при 0.3 — как без него (раунд 4).
+USE_FTS = _b("USE_FTS", True)
+FTS_WEIGHT = _f("FTS_WEIGHT", 0.3)
 
 # --- не проверено замером: по умолчанию выключено ---------------------------
 USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", False)

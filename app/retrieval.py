@@ -1,8 +1,10 @@
-"""Поиск тредов: вектор → пул кандидатов → реранкер → топ-N.
+"""Поиск тредов: вектор + полнотекст → пул кандидатов → реранкер → топ-N по дате.
 
-Ровно та связка, что победила в замере (docs/QUALITY.md, раунды 3 и 5).
-Полнотекстовая ветка и свежесть остаются доступны через настройки, но по
-умолчанию не участвуют: замер не показал от них пользы.
+Реранкер — из замера (docs/QUALITY.md, раунды 3 и 5). Полнотекстовая ветка и
+порядок по дате включены решением владельца и замером пока не подтверждены:
+на 50 вопросах полнотекст с весом 0.3 не менял метрики ни в одну сторону.
+Свежесть как множитель ранга (USE_RECENCY) — отдельная, до сих пор выключенная
+история: она меняет отбор, а порядок по дате — только чтение.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -75,7 +77,13 @@ def search(question: str, top_k: int | None = None,
         threads.sort(key=lambda t: (t.rerank_score if t.rerank_score is not None
                                     else float("-inf")), reverse=True)
 
-    return Retrieved(threads=threads[:top_k], pool_size=len(rows))
+    best = threads[:top_k]
+    if config.CONTEXT_SORT_BY_DATE:
+        # порядок в промпте — по дате; отбор тредов при этом остаётся за
+        # реранкером, дата решает только что модель прочтёт первым
+        best.sort(key=lambda t: t.last_activity_at, reverse=True)
+
+    return Retrieved(threads=best, pool_size=len(rows))
 
 
 def build_context(threads: list[Thread]) -> str:
