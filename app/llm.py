@@ -27,6 +27,17 @@ class LLMError(RuntimeError):
     pass
 
 
+def _relax(body: dict, error_text: str) -> bool:
+    """Подгоняет запрос под капризы модели. True — есть что исправить и повторить."""
+    if "max_tokens" in error_text and "max_tokens" in body:
+        body["max_completion_tokens"] = body.pop("max_tokens")
+        return True
+    if "temperature" in error_text and "temperature" in body:
+        body.pop("temperature")
+        return True
+    return False
+
+
 def complete(prompt: str, system: str = "", max_tokens: int = 1500,
              temperature: float = 0.2, attempts: int = 4) -> str:
     """Ответ модели. На 429 (лимит запросов) ждём с нарастающей паузой —
@@ -41,6 +52,10 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1500,
             r = client().post("/chat/completions", json=body)
             if r.status_code == 429:
                 raise httpx.HTTPStatusError("429", request=r.request, response=r)
+            if r.status_code == 400 and _relax(body, r.text):
+                # рассуждающие модели OpenAI не принимают max_tokens и чужую
+                # температуру; узнаём об этом только из текста ошибки
+                continue
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
             if content:

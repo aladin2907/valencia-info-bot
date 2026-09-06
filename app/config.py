@@ -33,10 +33,14 @@ MODELS_URL = os.getenv("MODELS_URL", "http://localhost:8081")
 MODELS_TIMEOUT = _f("MODELS_TIMEOUT", 120.0)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
 
-# --- LLM (OpenRouter или любой совместимый) ---------------------------------
+# --- LLM: OpenRouter, OpenAI напрямую или любой совместимый ------------------
+# Явные LLM_* всегда главнее: так переключение на OpenAI — три строки в .env,
+# а старые ключи OpenRouter можно не удалять.
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-LLM_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("OPENROUTER_MODEL") or os.getenv("LLM_MODEL", "stealth/ox-alpha")
+LLM_API_KEY = (os.getenv("LLM_API_KEY")
+               or ("api.openai.com" in LLM_BASE_URL and os.getenv("OPENAI_API_KEY"))
+               or os.getenv("OPENROUTER_API_KEY", ""))
+LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL", "minimax/minimax-m3:free")
 LLM_TIMEOUT = _f("LLM_TIMEOUT", 300.0)
 
 # --- поиск -------------------------------------------------------------------
