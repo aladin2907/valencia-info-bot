@@ -31,8 +31,15 @@ ON CONFLICT (group_slug, message_id) DO UPDATE
 
 
 def _last_id(conn, group: str) -> int:
+    """Докуда уже дошли. Если сырой архив пуст, а треды залиты из файлов —
+    берём последний корень треда: иначе докачка начнёт историю группы заново."""
     with conn.cursor() as cur:
         cur.execute("SELECT coalesce(max(message_id), 0) AS m FROM messages WHERE group_slug = %s",
+                    (group,))
+        last = cur.fetchone()["m"]
+        if last:
+            return last
+        cur.execute("SELECT coalesce(max(root_message_id), 0) AS m FROM threads WHERE group_slug = %s",
                     (group,))
         return cur.fetchone()["m"]
 
@@ -64,7 +71,17 @@ async def fetch_group(client, conn, group: str, since: datetime | None = None,
     entity = await client.get_entity(group)
     prefix = _link_prefix(entity)
     saved = 0
-    async for msg in client.iter_messages(entity, min_id=last, reverse=True, limit=limit):
+    # Точку старта должен выбирать Telegram, а не мы. Без offset_date первый
+    # запуск идёт от самого первого сообщения группы и выбрасывает старое уже
+    # у себя — то есть выкачивает всю историю впустую и рискует нарваться на
+    # ограничение частоты. При наличии отметки командует min_id: у Telethon в
+    # обратном порядке offset_id важнее даты.
+    window = {"reverse": True, "limit": limit}
+    if last:
+        window["min_id"] = last
+    elif since:
+        window["offset_date"] = since
+    async for msg in client.iter_messages(entity, **window):
         if not isinstance(msg, Message) or not (msg.message or "").strip():
             continue
         sent = msg.date if msg.date.tzinfo else msg.date.replace(tzinfo=timezone.utc)

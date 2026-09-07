@@ -28,11 +28,16 @@ def main() -> int:
                     help="окно пересборки тредов, дней")
     ap.add_argument("--since-days", type=int, default=0,
                     help="докачивать только сообщения свежее N дней")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="максимум сообщений на группу за прогон")
     ap.add_argument("--groups", default=",".join(config.GROUPS))
     a = ap.parse_args()
 
     groups = [g.strip() for g in a.groups.split(",") if g.strip()]
     since = datetime.now(timezone.utc) - timedelta(days=a.since_days) if a.since_days else None
+    # Окно пересборки не может быть уже окна докачки: иначе скачанные сообщения
+    # осядут в архиве и никогда не станут тредами — окно ползёт только вперёд.
+    window = max(a.window, a.since_days)
     report = {"started_at": datetime.now(timezone.utc).isoformat(), "groups": groups}
     t0 = time.time()
 
@@ -40,13 +45,18 @@ def main() -> int:
         # 1. докачка
         if not a.skip_fetch:
             from ingest import fetch
-            report["fetch"] = fetch.run(conn, groups=groups, since=since)
+            report["fetch"] = fetch.run(conn, groups=groups, since=since, limit=a.limit)
             print(f"докачка: {report['fetch']}", flush=True)
 
-        # 2. пересборка тредов за окно
-        report["threads"] = [
-            threads_mod.rebuild(conn, g, window_days=a.window) for g in groups
-        ]
+        # 2. пересборка тредов за окно. Падение на одной группе не должно
+        # лишать остальные ни тредов, ни векторов.
+        report["threads"] = []
+        for g in groups:
+            try:
+                report["threads"].append(threads_mod.rebuild(conn, g, window_days=window))
+            except Exception as e:
+                conn.rollback()
+                report["threads"].append({"group": g, "error": str(e)})
         print(f"треды: {report['threads']}", flush=True)
 
         # 3. векторы для изменившихся
@@ -67,8 +77,11 @@ def main() -> int:
     report["seconds"] = round(time.time() - t0)
 
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
+    # Код возврата — единственное, что видит cron. Ошибка докачки или
+    # пересборки тоже должна его красить, иначе тихий сбой не заметит никто.
+    broken = sum(1 for r in report.get("fetch", []) + report.get("threads", []) if "error" in r)
     failed = report.get("embeddings", {}).get("failed", 0)
-    return 1 if failed else 0
+    return 1 if (broken or failed) else 0
 
 
 if __name__ == "__main__":
