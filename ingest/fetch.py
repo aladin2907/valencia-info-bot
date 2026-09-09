@@ -68,7 +68,7 @@ def _link_prefix(entity) -> str:
 async def fetch_group(client, conn, group: str, since: datetime | None = None,
                       limit: int | None = None) -> dict:
     last = _last_id(conn, group)
-    entity = await client.get_entity(group)
+    entity = await client.get_entity(config.TG_CHATS.get(group, group))
     prefix = _link_prefix(entity)
     saved = 0
     # Точку старта должен выбирать Telegram, а не мы. Без offset_date первый

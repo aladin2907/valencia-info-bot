@@ -83,6 +83,25 @@ RATE_LIMIT_SECONDS = _i("RATE_LIMIT_SECONDS", 300)
 # --- ingest -----------------------------------------------------------------
 GROUPS = [g.strip() for g in os.getenv(
     "GROUPS", "it_ua_valencia,matusi_valencia,valencia_parents_kids_schools").split(",") if g.strip()]
+
+
+def _chats() -> dict[str, int | str]:
+    """Наши имена групп ↔ адреса в Telegram: «slug=@username,slug=-100...».
+
+    Внутренние имена (it_ua_valencia) в Telegram ничего не значат, а у части
+    групп нет и username — остаётся числовой id. Держим это в настройках, а не
+    в коде: id приватных групп в открытый репозиторий класть незачем.
+    """
+    out: dict[str, int | str] = {}
+    for pair in os.getenv("TG_CHATS", "").split(","):
+        slug, _, peer = pair.partition("=")
+        slug, peer = slug.strip(), peer.strip()
+        if slug and peer:
+            out[slug] = int(peer) if peer.lstrip("-").isdigit() else peer
+    return out
+
+
+TG_CHATS = _chats()
 THREAD_REBUILD_DAYS = _i("THREAD_REBUILD_DAYS", 14)
 EMBED_BATCH = _i("EMBED_BATCH", 64)
 
