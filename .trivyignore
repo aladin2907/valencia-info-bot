@@ -1,0 +1,27 @@
+# Trivy vulnerability suppressions for the valencia-info-bot images.
+#
+# Every entry below is a documented false positive: the flagged package is NOT a
+# real runtime dependency of our application. Re-review these whenever the base
+# image or pip version changes.
+#
+# ---------------------------------------------------------------------------
+# msgpack (pip's vendored copy)
+# ---------------------------------------------------------------------------
+# Trivy reports msgpack 1.1.2 (GHSA-6v7p-g79w-8964, HIGH). This is NOT an
+# installed dependency. It is the copy pip bundles inside
+#   /usr/local/lib/python3.12/site-packages/pip/_vendor/msgpack
+# (see pip/_vendor/vendor.txt -> msgpack==1.1.2). It is internal to pip, not
+# importable by our app, and never processes untrusted input at runtime.
+# It clears on its own once pip ships a newer vendored msgpack.
+GHSA-6v7p-g79w-8964
+
+# ---------------------------------------------------------------------------
+# setuptools (phantom / stale metadata)
+# ---------------------------------------------------------------------------
+# Trivy reports setuptools 70.3.0 (CVE-2025-47273 HIGH, CVE-2026-59890 MEDIUM),
+# but setuptools is not importable in the app image (ModuleNotFoundError) and is
+# already 84.0.0 in the models image -- both well past the fixed versions
+# (78.1.1 / 83.0.0). The 70.3.0 reference comes from stale/vendored metadata,
+# not an actually-installed vulnerable package.
+CVE-2025-47273
+CVE-2026-59890
