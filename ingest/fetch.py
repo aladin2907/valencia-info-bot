@@ -11,11 +11,16 @@ import os
 from datetime import datetime, timezone
 
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.tl.types import Message
 
 from app import config
 
 SESSION = os.getenv("TG_SESSION_PATH", "sessions/valencia_ingest")
+# В ECS диск контейнера read-only, а узел эфемерный: файл сессии там хранить
+# негде. Поэтому сессию можно передать строкой (Secrets Manager -> env).
+# Строка делается из файла: StringSession.save(SQLiteSession(path)).
+SESSION_STRING = os.getenv("TG_SESSION_STRING", "").strip()
 API_ID = os.getenv("TG_API_ID")
 API_HASH = os.getenv("TG_API_HASH")
 
@@ -106,9 +111,13 @@ async def fetch_all(conn, groups: list[str] | None = None,
     if not API_ID or not API_HASH:
         raise RuntimeError("нет TG_API_ID / TG_API_HASH — докачка невозможна")
     groups = groups or config.GROUPS
-    os.makedirs(os.path.dirname(SESSION) or ".", exist_ok=True)
+    if SESSION_STRING:
+        session = StringSession(SESSION_STRING)
+    else:
+        os.makedirs(os.path.dirname(SESSION) or ".", exist_ok=True)
+        session = SESSION
     out = []
-    async with TelegramClient(SESSION, int(API_ID), API_HASH) as client:
+    async with TelegramClient(session, int(API_ID), API_HASH) as client:
         for g in groups:
             try:
                 out.append(await fetch_group(client, conn, g, since=since, limit=limit))
