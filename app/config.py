@@ -63,6 +63,18 @@ USE_RERANK = _b("USE_RERANK", True)      # главный рычаг качес�
 USE_FTS = _b("USE_FTS", True)
 FTS_WEIGHT = _f("FTS_WEIGHT", 0.3)
 
+# --- реранкер: свой bge или внешняя модель решений Jev ----------------------
+# RERANK_BACKEND выбирает модель; USE_RERANK остаётся главным выключателем —
+# при USE_RERANK=false реранкера нет независимо от RERANK_BACKEND. По умолчанию
+# "local", чтобы ничего не менялось без явной настройки (см. decisions/2026-09-21-jev-reranker.md).
+RERANK_BACKEND = os.getenv("RERANK_BACKEND", "local").strip().lower()  # off | local | jev
+JEV_API_KEY = os.getenv("JEV_API_KEY", "")
+JEV_URL = os.getenv("JEV_URL", "https://openrouter.ai/api/alpha/decisions")
+JEV_MODEL = os.getenv("JEV_MODEL", "~typesafe/jev-latest")
+JEV_CHARS = _i("JEV_CHARS", 1200)        # обрезка треда для оценки Jev
+JEV_CONCURRENCY = _i("JEV_CONCURRENCY", 12)  # параллельных вызовов, один тред на вызов
+JEV_TIMEOUT = _f("JEV_TIMEOUT", 30.0)
+
 # --- не проверено замером: по умолчанию выключено ---------------------------
 USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", False)
 USE_RECENCY = _b("USE_RECENCY", False)
