@@ -39,9 +39,10 @@ def _relax(body: dict, error_text: str) -> bool:
 
 
 def complete(prompt: str, system: str = "", max_tokens: int = 1500,
-             temperature: float = 0.2, attempts: int = 4) -> str:
+             temperature: float = 0.2, attempts: int | None = None) -> str:
     """Ответ модели. На 429 (лимит запросов) ждём с нарастающей паузой —
     без этого повтор прилетает в тот же лимит и запрос теряется."""
+    attempts = config.LLM_ATTEMPTS if attempts is None else attempts
     messages = ([{"role": "system", "content": system}] if system else []) + \
                [{"role": "user", "content": prompt}]
     body = {"model": config.LLM_MODEL, "messages": messages,

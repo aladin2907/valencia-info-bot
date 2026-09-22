@@ -78,7 +78,11 @@ def _rerank_scores(question: str, documents: list[str]) -> list[float | None] | 
 
     scored = sum(1 for s in scores if s is not None)
     elapsed = time.monotonic() - started
-    if scored < config.CONTEXT_THREADS:
+    # Достаточно оценок — это столько, сколько тредов уйдёт в ответ, но не больше
+    # самого пула: на узкой выборке (фильтр по группе, неполный корпус) кандидатов
+    # бывает меньше CONTEXT_THREADS, и тогда полный успешный реранк нельзя считать
+    # провалом.
+    if scored < min(config.CONTEXT_THREADS, total):
         logger.info(
             "rerank backend=%s scored=%d/%d elapsed=%.2fs -> hybrid order kept%s",
             backend, scored, total, elapsed,
@@ -127,7 +131,9 @@ def search(question: str, top_k: int | None = None,
             # оценённые треды, неоценённые остаются на своих гибридных местах —
             # иначе несколько случайных тредов без оценки вытесняют хороший
             # гибридный топ (см. knowledge/decisions/2026-09-21-jev-reranker.md)
-            scored_positions = [i for i, s in enumerate(scores) if s is not None]
+            # срез по числу тредов: бэкенд, вернувший лишние оценки, не должен
+            # ронять поиск обращением за границу списка
+            scored_positions = [i for i, s in enumerate(scores[:len(threads)]) if s is not None]
             scored_threads = sorted(
                 (threads[i] for i in scored_positions),
                 key=lambda t: t.rerank_score,

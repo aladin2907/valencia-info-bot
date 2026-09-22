@@ -17,6 +17,7 @@ import httpx
 from app import config
 
 _client: httpx.Client | None = None
+_client_lock = threading.Lock()
 
 # Short pause before a retry after a 429 (rate limit), seconds.
 _RETRY_AFTER_429 = 0.5
@@ -29,23 +30,33 @@ _HARD_FAIL_LIMIT = 5
 
 def _get_client() -> httpx.Client:
     global _client
-    if _client is None:
-        _client = httpx.Client(
-            # Read timeout is the per-call budget (JEV_TIMEOUT); the pool timeout
-            # is how long a thread waits for a free connection from the shared
-            # pool — kept short so a second concurrent question doesn't sit idle
-            # for the same duration as a slow Jev call.
-            timeout=httpx.Timeout(connect=5.0, read=config.JEV_TIMEOUT,
-                                   write=config.JEV_TIMEOUT, pool=5.0),
-            headers={
-                "Authorization": f"Bearer {config.JEV_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            # Enough connections for several concurrent questions, not just one.
-            limits=httpx.Limits(max_connections=config.JEV_CONCURRENCY * 4,
-                                 max_keepalive_connections=config.JEV_CONCURRENCY),
-        )
+    if _client is not None:
+        return _client
+    # Twelve workers enter here at once on the first question; building the
+    # client takes tens of milliseconds, so without the lock each of them
+    # builds its own and eleven are dropped unclosed.
+    with _client_lock:
+        if _client is None:
+            _client = _build_client()
     return _client
+
+
+def _build_client() -> httpx.Client:
+    return httpx.Client(
+        # Read timeout is the per-call budget (JEV_TIMEOUT); the pool timeout
+        # is how long a thread waits for a free connection from the shared
+        # pool — kept short so a second concurrent question doesn't sit idle
+        # for the same duration as a slow Jev call.
+        timeout=httpx.Timeout(connect=5.0, read=config.JEV_TIMEOUT,
+                              write=config.JEV_TIMEOUT, pool=5.0),
+        headers={
+            "Authorization": f"Bearer {config.JEV_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        # Enough connections for several concurrent questions, not just one.
+        limits=httpx.Limits(max_connections=config.JEV_CONCURRENCY * 4,
+                            max_keepalive_connections=config.JEV_CONCURRENCY),
+    )
 
 
 def _value(item) -> float | None:
@@ -107,9 +118,13 @@ def _call_one(question: str, document: str, deadline: float,
             continue
         if r.status_code < 400:
             try:
-                return _value((r.json().get("answers") or {}).get("useful")), None
+                score = _value((r.json().get("answers") or {}).get("useful"))
             except Exception as e:
                 return None, type(e).__name__
+            # A 200 whose body we cannot read is still a failure, and it must
+            # carry a reason — otherwise the fallback log line says "scored 0"
+            # with nothing to explain why.
+            return (score, None) if score is not None else (None, "unparsed")
         if r.status_code == 429:
             reason = "429"
             if attempt == 0:

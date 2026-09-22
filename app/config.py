@@ -61,7 +61,12 @@ LLM_API_KEY = (os.getenv("LLM_API_KEY")
                or ("api.openai.com" in LLM_BASE_URL and os.getenv("OPENAI_API_KEY"))
                or os.getenv("OPENROUTER_API_KEY", ""))
 LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL", "minimax/minimax-m3:free")
-LLM_TIMEOUT = _f("LLM_TIMEOUT", 300.0)
+# Собственный потолок API должен укладываться в терпение бота: он ждёт ответа
+# 300 с (bot/main.py). При LLM_TIMEOUT=300 и четырёх попытках худший случай был
+# около 20 минут — бот давно ушёл, а запрос продолжал жечь токены. Измеренный
+# ответ занимает около 7 с, так что 60 с на попытку — восьмикратный запас.
+LLM_TIMEOUT = _f("LLM_TIMEOUT", 60.0)
+LLM_ATTEMPTS = _i("LLM_ATTEMPTS", 3)
 
 # --- поиск -------------------------------------------------------------------
 # 100 кандидатов из базы: при 30 тредах в ответе пул в 50 оставлял реранкеру
