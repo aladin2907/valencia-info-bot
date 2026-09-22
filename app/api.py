@@ -1,4 +1,5 @@
 """HTTP-ядро. Telegram-бот и мобильное приложение — два равноправных клиента."""
+import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from app import answer as answer_mod
 from app import config, db, llm, models_client
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
 @asynccontextmanager

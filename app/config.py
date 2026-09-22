@@ -4,23 +4,43 @@
 фактов, проверка по официальным источникам), по умолчанию ВЫКЛЮЧЕНО. Правило из
 docs/QUALITY.md: изменение остаётся, только если метрики выросли.
 """
+import logging
 import os
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 
 def _b(name: str, default: bool) -> bool:
-    return os.getenv(name, "1" if default else "0").strip().lower() in ("1", "true", "yes", "on")
+    raw = os.getenv(name, "1" if default else "0").strip()
+    if not raw:
+        return default
+    return raw.lower() in ("1", "true", "yes", "on")
 
 
 def _f(name: str, default: float) -> float:
-    return float(os.getenv(name, default))
+    raw = os.getenv(name, str(default)).strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("%s=%r is not a number, using default %s", name, raw, default)
+        return default
 
 
 def _i(name: str, default: int) -> int:
-    return int(os.getenv(name, default))
+    raw = os.getenv(name, str(default)).strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer, using default %s", name, raw, default)
+        return default
 
 
 # --- база -------------------------------------------------------------------
@@ -67,13 +87,20 @@ FTS_WEIGHT = _f("FTS_WEIGHT", 0.3)
 # RERANK_BACKEND выбирает модель; USE_RERANK остаётся главным выключателем —
 # при USE_RERANK=false реранкера нет независимо от RERANK_BACKEND. По умолчанию
 # "local", чтобы ничего не менялось без явной настройки (см. decisions/2026-09-21-jev-reranker.md).
-RERANK_BACKEND = os.getenv("RERANK_BACKEND", "local").strip().lower()  # off | local | jev
+# Пустая строка (незаполненная переменная в .env) тоже означает "local".
+_RERANK_BACKENDS = ("off", "local", "jev")
+RERANK_BACKEND = (os.getenv("RERANK_BACKEND") or "local").strip().lower()
+if RERANK_BACKEND not in _RERANK_BACKENDS:
+    raise ValueError(
+        f"RERANK_BACKEND={RERANK_BACKEND!r} is invalid, expected one of {_RERANK_BACKENDS}"
+    )
 JEV_API_KEY = os.getenv("JEV_API_KEY", "")
-JEV_URL = os.getenv("JEV_URL", "https://openrouter.ai/api/alpha/decisions")
-JEV_MODEL = os.getenv("JEV_MODEL", "~typesafe/jev-latest")
+JEV_URL = os.getenv("JEV_URL") or "https://openrouter.ai/api/alpha/decisions"
+JEV_MODEL = os.getenv("JEV_MODEL") or "~typesafe/jev-latest"
 JEV_CHARS = _i("JEV_CHARS", 1200)        # обрезка треда для оценки Jev
 JEV_CONCURRENCY = _i("JEV_CONCURRENCY", 12)  # параллельных вызовов, один тред на вызов
-JEV_TIMEOUT = _f("JEV_TIMEOUT", 30.0)
+JEV_TIMEOUT = _f("JEV_TIMEOUT", 10.0)    # замер: типичный вызов ~0.3с
+JEV_BUDGET = _f("JEV_BUDGET", 60.0)      # общий бюджет rank() на весь пул, секунд
 
 # --- не проверено замером: по умолчанию выключено ---------------------------
 USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", False)

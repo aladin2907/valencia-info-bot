@@ -7,6 +7,7 @@
 история: она меняет отбор, а порядок по дате — только чтение.
 """
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -45,22 +46,47 @@ class Retrieved:
 def _rerank_scores(question: str, documents: list[str]) -> list[float | None] | None:
     """Score documents with the configured backend.
 
-    Returns None when the backend is unusable (jev failed or scored nothing) —
-    the caller then keeps the hybrid-search order, exactly like today with no
-    reranker. A single failed document inside a working batch still returns a
-    normal list with None entries, handled by the caller like a partial bge answer.
+    Returns None when the backend is unusable — call failed, key missing, or
+    too few documents got a score to trust the order — the caller then keeps
+    the hybrid-search order, exactly like today with no reranker. Otherwise
+    returns one entry per document (None for a document that could not be
+    scored); the caller reorders only the scored documents and leaves the rest
+    where the hybrid search put them. Same rule for both backends: a reranker
+    failure of any kind falls back to the hybrid order instead of surfacing an
+    error to the user.
     """
-    if config.RERANK_BACKEND == "jev":
+    backend = config.RERANK_BACKEND
+    total = len(documents)
+    started = time.monotonic()
+    fail_summary = ""
+
+    if backend == "jev":
+        if not config.JEV_API_KEY:
+            logger.warning("rerank backend=jev skipped: JEV_API_KEY is empty, hybrid order kept")
+            return None
         try:
-            scores = jev_client.rank(question, documents)
-        except Exception:
-            logger.warning("jev rerank call failed, falling back to hybrid order", exc_info=True)
+            scores, fail_summary = jev_client.rank(question, documents)
+        except Exception as e:
+            logger.warning("rerank backend=jev call failed (%s), hybrid order kept", type(e).__name__)
             return None
-        if all(s is None for s in scores):
-            logger.warning("jev rerank returned no scores, falling back to hybrid order")
+    else:
+        try:
+            scores = models_client.rerank(question, documents)
+        except Exception as e:
+            logger.warning("rerank backend=local call failed (%s), hybrid order kept", type(e).__name__)
             return None
-        return scores
-    return models_client.rerank(question, documents)
+
+    scored = sum(1 for s in scores if s is not None)
+    elapsed = time.monotonic() - started
+    if scored < config.CONTEXT_THREADS:
+        logger.info(
+            "rerank backend=%s scored=%d/%d elapsed=%.2fs -> hybrid order kept%s",
+            backend, scored, total, elapsed,
+            f" (reason={fail_summary})" if fail_summary else "",
+        )
+        return None
+    logger.info("rerank backend=%s scored=%d/%d elapsed=%.2fs", backend, scored, total, elapsed)
+    return scores
 
 
 def search(question: str, top_k: int | None = None,
@@ -97,11 +123,20 @@ def search(question: str, top_k: int | None = None,
         if scores is not None:
             for t, s in zip(threads, scores):
                 t.rerank_score = s
-            # если реранкер вернул меньше оценок, чем кандидатов, безоценочные
-            # уходят в конец, а не роняют сортировку
-            threads.sort(key=lambda t: (t.rerank_score if t.rerank_score is not None
-                                        else float("-inf")), reverse=True)
-        # scores is None: реранкер недоступен, оставляем гибридный порядок как есть
+            # стабильная частичная сортировка: переставляем между собой только
+            # оценённые треды, неоценённые остаются на своих гибридных местах —
+            # иначе несколько случайных тредов без оценки вытесняют хороший
+            # гибридный топ (см. knowledge/decisions/2026-09-21-jev-reranker.md)
+            scored_positions = [i for i, s in enumerate(scores) if s is not None]
+            scored_threads = sorted(
+                (threads[i] for i in scored_positions),
+                key=lambda t: t.rerank_score,
+                reverse=True,
+            )
+            for pos, t in zip(scored_positions, scored_threads):
+                threads[pos] = t
+        # scores is None: реранкер недоступен или оценил меньше CONTEXT_THREADS
+        # тредов — оставляем гибридный порядок как есть
 
     best = threads[:top_k]
     if config.CONTEXT_SORT_BY_DATE:
