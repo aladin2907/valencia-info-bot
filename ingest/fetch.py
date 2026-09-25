@@ -3,6 +3,9 @@
 Инкрементально: с последнего сохранённого message_id по каждой группе. Первый
 запуск можно ограничить датой (--since), чтобы не тянуть всю историю разом.
 
+История назад (--backfill-days) идёт от самого старого сохранённого сообщения
+в прошлое, поэтому прерванный прогон продолжается с того места, где встал.
+
 Нужен пользовательский аккаунт (Telethon), а не бот: боты не читают историю
 групп. api_id/api_hash берутся на my.telegram.org.
 """
@@ -46,6 +49,14 @@ def _last_id(conn, group: str) -> int:
             return last
         cur.execute("SELECT coalesce(max(root_message_id), 0) AS m FROM threads WHERE group_slug = %s",
                     (group,))
+        return cur.fetchone()["m"]
+
+
+def _first_id(conn, group: str) -> int | None:
+    """Самое старое сохранённое сообщение — отметка для докачки назад.
+    Ночная докачка вперёд смотрит на максимум, поэтому её эта отметка не сдвигает."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT min(message_id) AS m FROM messages WHERE group_slug = %s", (group,))
         return cur.fetchone()["m"]
 
 
@@ -106,8 +117,45 @@ async def fetch_group(client, conn, group: str, since: datetime | None = None,
     return {"group": group, "from_id": last, "saved": saved}
 
 
+async def backfill_group(client, conn, group: str, until: datetime,
+                         limit: int | None = None) -> dict:
+    """История назад: от самого старого сохранённого сообщения к более старым,
+    до даты until или начала группы. Если сообщений группы в базе нет — от
+    последнего сообщения группы."""
+    first = _first_id(conn, group)
+    entity = await client.get_entity(config.TG_CHATS.get(group, group))
+    prefix = _link_prefix(entity)
+    saved = 0
+    oldest = None
+    # Без reverse Telethon идёт от новых к старым, offset_id — исключительно:
+    # сообщения строго старше отметки.
+    window = {"limit": limit}
+    if first:
+        window["offset_id"] = first
+    async for msg in client.iter_messages(entity, **window):
+        sent = msg.date if msg.date.tzinfo else msg.date.replace(tzinfo=timezone.utc)
+        if sent < until:
+            break
+        if not isinstance(msg, Message) or not (msg.message or "").strip():
+            continue
+        with conn.cursor() as cur:
+            cur.execute(UPSERT, (
+                group, msg.id, msg.sender_id, await _sender_name(client, msg),
+                msg.message, msg.reply_to_msg_id, sent, msg.edit_date, f"{prefix}{msg.id}",
+            ))
+        saved += 1
+        oldest = sent
+        if saved % 500 == 0:
+            conn.commit()
+            print(f"  {group}: назад {saved}, дошли до {sent:%Y-%m-%d}", flush=True)
+    conn.commit()
+    return {"group": group, "backfill_from_id": first, "saved": saved,
+            "oldest": oldest.isoformat() if oldest else None}
+
+
 async def fetch_all(conn, groups: list[str] | None = None,
-                    since: datetime | None = None, limit: int | None = None) -> list[dict]:
+                    since: datetime | None = None, limit: int | None = None,
+                    backfill_until: datetime | None = None) -> list[dict]:
     if not API_ID or not API_HASH:
         raise RuntimeError("нет TG_API_ID / TG_API_HASH — докачка невозможна")
     groups = groups or config.GROUPS
@@ -123,9 +171,15 @@ async def fetch_all(conn, groups: list[str] | None = None,
                 out.append(await fetch_group(client, conn, g, since=since, limit=limit))
             except Exception as e:
                 out.append({"group": g, "error": str(e)})
+            if backfill_until:
+                try:
+                    out.append(await backfill_group(client, conn, g, backfill_until, limit=limit))
+                except Exception as e:
+                    out.append({"group": g, "backfill": True, "error": str(e)})
     return out
 
 
 def run(conn, groups: list[str] | None = None, since: datetime | None = None,
-        limit: int | None = None) -> list[dict]:
-    return asyncio.run(fetch_all(conn, groups=groups, since=since, limit=limit))
+        limit: int | None = None, backfill_until: datetime | None = None) -> list[dict]:
+    return asyncio.run(fetch_all(conn, groups=groups, since=since, limit=limit,
+                                 backfill_until=backfill_until))

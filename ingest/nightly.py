@@ -4,6 +4,7 @@
     python -m ingest.nightly                # всё
     python -m ingest.nightly --skip-fetch   # только пересборка и векторы
     python -m ingest.nightly --window 30    # окно пересборки, дней
+    python -m ingest.nightly --backfill-days 3650   # плюс история назад
 
 Прогон идемпотентный: упал на середине — перезапуск догоняет, дублей не будет.
 Слой фактов (facts) в прогон пока не входит: он в схеме есть, но замером не
@@ -30,14 +31,18 @@ def main() -> int:
                     help="докачивать только сообщения свежее N дней")
     ap.add_argument("--limit", type=int, default=None,
                     help="максимум сообщений на группу за прогон")
+    ap.add_argument("--backfill-days", type=int, default=0,
+                    help="докачать историю назад, от самого старого сохранённого до N дней назад")
     ap.add_argument("--groups", default=",".join(config.GROUPS))
     a = ap.parse_args()
 
     groups = [g.strip() for g in a.groups.split(",") if g.strip()]
-    since = datetime.now(timezone.utc) - timedelta(days=a.since_days) if a.since_days else None
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=a.since_days) if a.since_days else None
+    until = now - timedelta(days=a.backfill_days) if a.backfill_days else None
     # Окно пересборки не может быть уже окна докачки: иначе скачанные сообщения
     # осядут в архиве и никогда не станут тредами — окно ползёт только вперёд.
-    window = max(a.window, a.since_days)
+    window = max(a.window, a.since_days, a.backfill_days)
     report = {"started_at": datetime.now(timezone.utc).isoformat(), "groups": groups}
     t0 = time.time()
 
@@ -45,7 +50,8 @@ def main() -> int:
         # 1. докачка
         if not a.skip_fetch:
             from ingest import fetch
-            report["fetch"] = fetch.run(conn, groups=groups, since=since, limit=a.limit)
+            report["fetch"] = fetch.run(conn, groups=groups, since=since, limit=a.limit,
+                                        backfill_until=until)
             print(f"докачка: {report['fetch']}", flush=True)
 
         # 2. пересборка тредов за окно. Падение на одной группе не должно
@@ -70,9 +76,11 @@ def main() -> int:
                                   (SELECT count(*) FROM threads) AS threads,
                                   (SELECT count(*) FROM thread_embeddings
                                     WHERE status='ready') AS embedded,
+                                  (SELECT min(started_at) FROM threads) AS oldest,
                                   (SELECT max(last_activity_at) FROM threads) AS freshest""")
             totals = cur.fetchone()
-    totals["freshest"] = totals["freshest"].isoformat() if totals["freshest"] else None
+    for k in ("oldest", "freshest"):
+        totals[k] = totals[k].isoformat() if totals[k] else None
     report["totals"] = totals
     report["seconds"] = round(time.time() - t0)
 
