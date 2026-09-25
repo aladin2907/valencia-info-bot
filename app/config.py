@@ -107,8 +107,15 @@ JEV_CONCURRENCY = _i("JEV_CONCURRENCY", 12)  # параллельных вызо
 JEV_TIMEOUT = _f("JEV_TIMEOUT", 10.0)    # замер: типичный вызов ~0.3с
 JEV_BUDGET = _f("JEV_BUDGET", 60.0)      # общий бюджет rank() на весь пул, секунд
 
+# --- ответ по схеме n8n (decisions/2026-09-24-n8n-answer-pipeline.md) --------
+# Переформулировка включена, как в n8n. Без ключа Perplexity ответ собирается
+# из опыта чата — пользователь без ответа не остаётся.
+USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", True)
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL") or "sonar"
+PERPLEXITY_TIMEOUT = _f("PERPLEXITY_TIMEOUT", 30.0)
+
 # --- не проверено замером: по умолчанию выключено ---------------------------
-USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", False)
 USE_RECENCY = _b("USE_RECENCY", False)
 RECENCY_HALF_LIFE_DAYS = _f("RECENCY_HALF_LIFE_DAYS", 365.0)
 RECENCY_FLOOR = _f("RECENCY_FLOOR", 0.6)

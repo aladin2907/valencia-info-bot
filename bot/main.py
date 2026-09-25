@@ -27,23 +27,17 @@ GREETING = (
 BUSY = "Сервер сейчас занят, попробуй ещё раз через пару минут."
 
 
-async def ask_api(question: str, user_id: int) -> tuple[str, list[dict]]:
+async def ask_api(question: str, user_id: int) -> str:
+    """Только текст ответа, как было в n8n. Ссылки на официальные сайты модель
+    вставляет прямо в текст; треды из `sources` остаются для других клиентов."""
     async with httpx.AsyncClient(base_url=config.API_URL, timeout=300.0) as client:
         r = await client.post("/ask", json={"question": question,
                                             "user_id": str(user_id),
                                             "platform": "telegram"})
         if r.status_code == 429:
-            return r.json().get("detail", "Слишком часто. Подожди немного."), []
+            return r.json().get("detail", "Слишком часто. Подожди немного.")
         r.raise_for_status()
-        data = r.json()
-        return data["answer"], data.get("sources", [])
-
-
-def format_sources(sources: list[dict]) -> str:
-    """Ссылки на обсуждения — чтобы можно было проверить ответ первоисточником."""
-    links = [s["link"] for s in sources[:3] if s.get("link")]
-    return "\n\n📎 " + " · ".join(f"[обсуждение {i + 1}]({u})" for i, u in enumerate(links)) \
-        if links else ""
+        return r.json()["answer"]
 
 
 async def send_answer(msg: Message, text: str) -> None:
@@ -73,12 +67,12 @@ async def main() -> None:
     async def question(msg: Message):
         await bot.send_chat_action(msg.chat.id, "typing")
         try:
-            answer, sources = await ask_api(msg.text, msg.from_user.id)
+            answer = await ask_api(msg.text, msg.from_user.id)
         except Exception as e:
             log.warning("ask failed: %s", e)
             await msg.answer(BUSY)
             return
-        await send_answer(msg, answer + format_sources(sources))
+        await send_answer(msg, answer)
 
     hook = await bot.get_webhook_info()
     if hook.url:
