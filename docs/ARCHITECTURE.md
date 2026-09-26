@@ -190,11 +190,12 @@ Jev (OpenRouter, `~typesafe/jev-latest`, вызов на тред паралле
 ### API
 
 ```
-POST /ask     { question, user_id, platform, lang? } → { answer, sources[], facts_used[] }
+POST /ask         { question, user_id, platform, lang? } → { answer, sources[], facts_used[] }
+POST /ask/stream  то же → строки JSON: {stage: threads|web|compose} …, последней — поля /ask или {error}
 GET  /health
 ```
 
-Ответ содержит источники (ссылки `t.me/...` на треды) — Telegram-бот их приклеивает текстом, мобильное приложение сможет показать карточками.
+Ответ содержит источники (ссылки `t.me/...` на треды) — мобильное приложение сможет показать их карточками. Telegram-бот ходит в `/ask/stream`: сразу пишет «запрос получен», по каждому `stage` — сообщение об этапе, как старый бот n8n, а в конце — только текст ответа.
 
 ---
 

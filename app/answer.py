@@ -227,6 +227,16 @@ def _compose(question: str, experience: str, official: str) -> str:
 
 def ask(question: str, user_id: int | None = None,
         groups: list[str] | None = None) -> Answer:
+    """Ответ целиком — для /ask."""
+    *_, result = ask_steps(question, user_id=user_id, groups=groups)
+    return result
+
+
+def ask_steps(question: str, user_id: int | None = None,
+              groups: list[str] | None = None):
+    """Те же шаги по одному. Перед выжимкой, интернетом и сборкой отдаёт имя шага
+    ("threads", "web", "compose") — бот показывает его пользователю, как n8n.
+    Последним отдаёт Answer. Спека — decisions/2026-09-26-bot-progress-messages.md."""
     t0 = time.time()
     marks = [t0]
 
@@ -236,17 +246,20 @@ def ask(question: str, user_id: int | None = None,
     found = retrieval.search(key_phrase or question, groups=groups)
     marks.append(time.time())
 
+    yield "threads"
     if found.threads:
         experience, queries = _extract(question, found.threads)
     else:
         experience, queries = NOT_DISCUSSED, [question]
     marks.append(time.time())
 
+    yield "web"
     # в Perplexity уходят только поисковые запросы — ни тредов, ни переписки
     official = perplexity.search(
         WEB_PROMPT.replace("{queries}", json.dumps(queries, ensure_ascii=False)))
     marks.append(time.time())
 
+    yield "compose"
     if not found.threads and not official:
         text = NOT_FOUND
     else:
@@ -266,7 +279,7 @@ def ask(question: str, user_id: int | None = None,
         thread_ids=[t.id for t in found.threads],
     )
     _log(question, result, user_id)
-    return result
+    yield result
 
 
 def _log(question: str, a: Answer, user_id: int | None) -> None:

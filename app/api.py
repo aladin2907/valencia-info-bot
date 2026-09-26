@@ -1,9 +1,11 @@
 """HTTP-ядро. Telegram-бот и мобильное приложение — два равноправных клиента."""
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import answer as answer_mod
@@ -94,16 +96,45 @@ def _rate_limit(platform: str, external_id: str) -> tuple[int, int]:
     return user["id"], 0
 
 
+def _user(body: AskIn) -> int | None:
+    """Пользователь для журнала вопросов; лимит превышен — 429."""
+    if not body.user_id:
+        return None
+    user_id, wait = _rate_limit(body.platform, body.user_id)
+    if wait:
+        raise HTTPException(429, f"Следующий вопрос можно задать через {wait // 60 + 1} мин.")
+    return user_id
+
+
 @app.post("/ask", response_model=AskOut)
 def ask(body: AskIn):
-    user_id = None
-    if body.user_id:
-        user_id, wait = _rate_limit(body.platform, body.user_id)
-        if wait:
-            raise HTTPException(429, f"Следующий вопрос можно задать через {wait // 60 + 1} мин.")
+    user_id = _user(body)
     try:
         result = answer_mod.ask(body.question, user_id=user_id, groups=body.groups)
     except llm.LLMError as e:
         raise HTTPException(503, f"Модель сейчас недоступна: {e}")
     return AskOut(answer=result.answer, sources=result.sources,
                   facts_used=result.facts_used, latency_ms=result.latency_ms)
+
+
+@app.post("/ask/stream")
+def ask_stream(body: AskIn):
+    """То же, что /ask, но по ходу работы, одна строка JSON на событие: перед
+    выжимкой, интернетом и сборкой — {"stage": ...}, последней — поля AskOut или
+    {"error": ...}. Лимит проверяется до начала: 429 приходит обычным ответом."""
+    user_id = _user(body)
+
+    def lines():
+        try:
+            for item in answer_mod.ask_steps(body.question, user_id=user_id, groups=body.groups):
+                if isinstance(item, str):
+                    event = {"stage": item}
+                else:
+                    event = AskOut(answer=item.answer, sources=item.sources,
+                                   facts_used=item.facts_used,
+                                   latency_ms=item.latency_ms).model_dump()
+                yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
+        except llm.LLMError as e:
+            yield json.dumps({"error": f"Модель сейчас недоступна: {e}"}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")

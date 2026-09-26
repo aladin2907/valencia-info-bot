@@ -7,6 +7,7 @@
     TELEGRAM_BOT_TOKEN=... API_URL=http://localhost:8080 python -m bot.main
 """
 import asyncio
+import json
 import logging
 
 import httpx
@@ -25,19 +26,52 @@ GREETING = (
     "Просто напиши вопрос своими словами."
 )
 BUSY = "Сервер сейчас занят, попробуй ещё раз через пару минут."
+# «processing» из наборов RU и UKR в n8n, дословно
+PROCESSING = {
+    "ru": "🤖 Ваш запрос получен. Запускаю интеллектуальный поиск и проверку данных — "
+          "ответ будет готов примерно через 3 минуты. Благодарю за доверие.",
+    "uk": "🤖 Привіт! Дякуємо, що ти з нами. Ми отримали твоє повідомлення, починаємо роботу "
+          "над пошуком інформації, скоро повернемось із відповіддю. Час обробки твого "
+          "запиту — 3 хвилини.",
+}
+# этапы на тех же местах, что в n8n; тексты — владельца (в n8n были английские)
+STAGES = {
+    "ru": {"threads": "Ищем в обсуждениях...",
+           "web": "Проверяем в интернете и официальных источниках...",
+           "compose": "Формируем ответ..."},
+    "uk": {"threads": "Шукаємо в обговореннях...",
+           "web": "Перевіряємо в інтернеті та офіційних джерелах...",
+           "compose": "Формуємо відповідь..."},
+}
 
 
-async def ask_api(question: str, user_id: int) -> str:
+async def ask_api(question: str, user_id: int, say) -> str:
     """Только текст ответа, как было в n8n. Ссылки на официальные сайты модель
-    вставляет прямо в текст; треды из `sources` остаются для других клиентов."""
+    вставляет прямо в текст; треды из `sources` остаются для других клиентов.
+
+    API отдаёт ответ строками по ходу работы. `say` получает событие:
+    "received" — лимит пройден и работа пошла, дальше имена этапов."""
     async with httpx.AsyncClient(base_url=config.API_URL, timeout=300.0) as client:
-        r = await client.post("/ask", json={"question": question,
-                                            "user_id": str(user_id),
-                                            "platform": "telegram"})
-        if r.status_code == 429:
-            return r.json().get("detail", "Слишком часто. Подожди немного.")
-        r.raise_for_status()
-        return r.json()["answer"]
+        async with client.stream("POST", "/ask/stream",
+                                 json={"question": question,
+                                       "user_id": str(user_id),
+                                       "platform": "telegram"}) as r:
+            if r.status_code == 429:
+                await r.aread()
+                return r.json().get("detail", "Слишком часто. Подожди немного.")
+            r.raise_for_status()
+            await say("received")
+            async for line in r.aiter_lines():
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                if "stage" in event:
+                    await say(event["stage"])
+                elif "answer" in event:
+                    return event["answer"]
+                else:
+                    raise RuntimeError(event.get("error") or line)
+    raise RuntimeError("API оборвал ответ на полпути")
 
 
 async def send_answer(msg: Message, text: str) -> None:
@@ -65,9 +99,20 @@ async def main() -> None:
 
     @dp.message(F.text & ~F.text.startswith("/"))
     async def question(msg: Message):
+        lang = "uk" if msg.from_user.language_code == "uk" else "ru"
+
+        async def say(event: str):
+            text = PROCESSING[lang] if event == "received" else STAGES[lang].get(event)
+            if not text:
+                return  # незнакомый этап пропускаем
+            try:
+                await msg.answer(text)
+            except Exception as e:  # из-за сообщения об этапе ответ не теряем
+                log.warning("stage message failed: %s", e)
+
         await bot.send_chat_action(msg.chat.id, "typing")
         try:
-            answer = await ask_api(msg.text, msg.from_user.id)
+            answer = await ask_api(msg.text, msg.from_user.id, say)
         except Exception as e:
             log.warning("ask failed: %s", e)
             await msg.answer(BUSY)
