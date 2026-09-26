@@ -174,6 +174,17 @@ COMPOSE_SYS = """РОЛЬ
 Верни ответ в виде JSON-объекта:
 { "message": "[твой готовый текст для отправки в Telegram]" }"""
 
+# Наш, не из n8n: уточнение в разговоре → самостоятельный вопрос. Спека —
+# decisions/2026-09-26-dialog-memory.md
+DIALOG_SYS = """Ты помогаешь боту о жизни в Валенсии понять новое сообщение пользователя в разговоре.
+Тебе дан разговор — прошлые вопросы этого пользователя и ответы бота — и новое сообщение.
+
+Если новое сообщение продолжает разговор (уточнение вроде «а сколько это стоит?», «а для ребёнка?», «а где это?», «а если без NIE?»), перепиши его в самостоятельный вопрос: дополни из разговора то, на что оно ссылается, чтобы вопрос был понятен без разговора.
+Если новое сообщение не связано с разговором или и так понятно без него — верни его без изменений.
+Пиши на языке нового сообщения, коротко, от лица пользователя. На вопрос не отвечай.
+
+Верни JSON: {"question": "самостоятельный вопрос"}"""
+
 NOT_FOUND = "Информация не найдена"
 NOT_DISCUSSED = "Эта тема не обсуждалась в этой группе"
 WEB_NOT_FOUND = "Information not found during search"
@@ -187,6 +198,32 @@ class Answer:
     key_phrase: str | None
     latency_ms: int
     thread_ids: list[int]
+
+
+def _history(user_id: int | None) -> list[dict]:
+    """Последние вопросы этого пользователя с ответами бота, от старых к новым.
+    Отбор только по его user_id: без пользователя истории нет, чужие вопросы
+    в разговор не попадают."""
+    if user_id is None or config.DIALOG_HISTORY <= 0:
+        return []
+    rows = db.query(
+        """SELECT question, answer FROM query_log
+            WHERE user_id = %s AND answer IS NOT NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s""",
+        (user_id, config.DIALOG_HISTORY),
+    )
+    return rows[::-1]
+
+
+def _standalone(message: str, history: list[dict]) -> str:
+    """Шаг 0: уточнение в разговоре → самостоятельный вопрос.
+    Модель недоступна, JSON не разобрался или пусто — сообщение как есть."""
+    talk = "\n\n".join(f"Пользователь: {h['question']}\nБот: {h['answer']}" for h in history)
+    data = llm.complete_json(f"Разговор:\n{talk}\n\nНовое сообщение:\n{message}",
+                             system=DIALOG_SYS, max_tokens=2000)
+    question = (data or {}).get("question")
+    return question.strip() if isinstance(question, str) and question.strip() else message
 
 
 def _rewrite(question: str) -> str | None:
@@ -238,7 +275,13 @@ def ask_steps(question: str, user_id: int | None = None,
     ("threads", "web", "compose") — бот показывает его пользователю, как n8n.
     Последним отдаёт Answer. Спека — decisions/2026-09-26-bot-progress-messages.md."""
     t0 = time.time()
-    marks = [t0]
+    asked = question  # в журнал — сообщение как написал пользователь
+    history = _history(user_id)
+    if history:
+        question = _standalone(asked, history)
+    logger.info("dialog: history %d, question %s, %.1f s", len(history),
+                "kept" if question == asked else "rewritten", time.time() - t0)
+    marks = [time.time()]
 
     key_phrase = _rewrite(question) if config.USE_QUERY_REWRITE else None
     marks.append(time.time())
@@ -278,7 +321,7 @@ def ask_steps(question: str, user_id: int | None = None,
         latency_ms=int((time.time() - t0) * 1000),
         thread_ids=[t.id for t in found.threads],
     )
-    _log(question, result, user_id)
+    _log(asked, result, user_id)
     yield result
 
 

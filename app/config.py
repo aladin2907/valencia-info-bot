@@ -114,6 +114,9 @@ USE_QUERY_REWRITE = _b("USE_QUERY_REWRITE", True)
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL") or "sonar"
 PERPLEXITY_TIMEOUT = _f("PERPLEXITY_TIMEOUT", 30.0)
+# Диалог: сколько последних вопросов пользователя с ответами бота помнить.
+# 0 — каждое сообщение отдельный вопрос, как раньше.
+DIALOG_HISTORY = _i("DIALOG_HISTORY", 5)
 
 # --- не проверено замером: по умолчанию выключено ---------------------------
 USE_RECENCY = _b("USE_RECENCY", False)
@@ -129,7 +132,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 # переключение — осознанное действие, не побочный эффект запуска.
 ALLOW_WEBHOOK_TAKEOVER = _b("ALLOW_WEBHOOK_TAKEOVER", False)
 API_URL = os.getenv("API_URL", "http://localhost:8080")
-RATE_LIMIT_SECONDS = _i("RATE_LIMIT_SECONDS", 300)
+# Пауза между вопросами одного пользователя, от вопроса до вопроса: 3 минуты
+# (решение владельца 26.09, было 5). 0 — без лимита.
+RATE_LIMIT_SECONDS = _i("RATE_LIMIT_SECONDS", 180)
 
 # --- ingest -----------------------------------------------------------------
 GROUPS = [g.strip() for g in os.getenv(

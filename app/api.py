@@ -84,7 +84,9 @@ def _rate_limit(platform: str, external_id: str) -> tuple[int, int]:
         (platform, external_id),
     )
     user = rows[0]
-    if user["wait"] > 0:
+    # лимит выключен — старые отметки не действуют: ни оставшиеся от прежних
+    # 300 с, ни от соседнего запроса того же человека, записанного на миг позже
+    if user["wait"] > 0 and config.RATE_LIMIT_SECONDS > 0:
         return user["id"], user["wait"]
     db.execute(
         """UPDATE users
@@ -102,7 +104,7 @@ def _user(body: AskIn) -> int | None:
         return None
     user_id, wait = _rate_limit(body.platform, body.user_id)
     if wait:
-        raise HTTPException(429, f"Следующий вопрос можно задать через {wait // 60 + 1} мин.")
+        raise HTTPException(429, f"Следующий вопрос можно задать через {-(-wait // 60)} мин.")
     return user_id
 
 

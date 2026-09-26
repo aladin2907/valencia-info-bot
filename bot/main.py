@@ -45,17 +45,18 @@ STAGES = {
 }
 
 
-async def ask_api(question: str, user_id: int, say) -> str:
+async def ask_api(question: str, user_id: int | None, say) -> str:
     """Только текст ответа, как было в n8n. Ссылки на официальные сайты модель
     вставляет прямо в текст; треды из `sources` остаются для других клиентов.
 
     API отдаёт ответ строками по ходу работы. `say` получает событие:
-    "received" — лимит пройден и работа пошла, дальше имена этапов."""
+    "received" — лимит пройден и работа пошла, дальше имена этапов.
+    Без user_id у вопроса нет ни истории разговора, ни лимита."""
+    body = {"question": question, "platform": "telegram"}
+    if user_id is not None:
+        body["user_id"] = str(user_id)
     async with httpx.AsyncClient(base_url=config.API_URL, timeout=300.0) as client:
-        async with client.stream("POST", "/ask/stream",
-                                 json={"question": question,
-                                       "user_id": str(user_id),
-                                       "platform": "telegram"}) as r:
+        async with client.stream("POST", "/ask/stream", json=body) as r:
             if r.status_code == 429:
                 await r.aread()
                 return r.json().get("detail", "Слишком часто. Подожди немного.")
@@ -110,9 +111,14 @@ async def main() -> None:
             except Exception as e:  # из-за сообщения об этапе ответ не теряем
                 log.warning("stage message failed: %s", e)
 
+        # От имени группы или канала (анонимный админ, пост от канала) Telegram
+        # подставляет одного общего «пользователя» на всех таких людей во всех
+        # группах — у такого сообщения своей истории нет, иначе разговоры смешаются.
+        user_id = None if msg.sender_chat else msg.from_user.id
+
         await bot.send_chat_action(msg.chat.id, "typing")
         try:
-            answer = await ask_api(msg.text, msg.from_user.id, say)
+            answer = await ask_api(msg.text, user_id, say)
         except Exception as e:
             log.warning("ask failed: %s", e)
             await msg.answer(BUSY)
