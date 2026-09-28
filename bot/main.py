@@ -45,12 +45,28 @@ STAGES = {
 }
 
 
+def stage_text(lang: str, event: dict) -> str | None:
+    """Текст служебного сообщения. В первом этапе — сколько обсуждений в базе,
+    со склонением: «по 54 901 обсуждению», «по 54 902 обсуждениям»."""
+    stage = event.get("stage")
+    if stage == "received":
+        return PROCESSING[lang]
+    total = event.get("total")
+    if stage == "threads" and isinstance(total, int) and total > 0:
+        n = f"{total:,}".replace(",", "\u00a0")
+        one = total % 10 == 1 and total % 100 != 11
+        if lang == "uk":
+            return f"Шукаємо серед {n} {'обговорення' if one else 'обговорень'} в групах Telegram..."
+        return f"Ищем по {n} {'обсуждению' if one else 'обсуждениям'} в группах Telegram..."
+    return STAGES[lang].get(stage)
+
+
 async def ask_api(question: str, user_id: int | None, say) -> str:
     """Только текст ответа, как было в n8n. Ссылки на официальные сайты модель
     вставляет прямо в текст; треды из `sources` остаются для других клиентов.
 
     API отдаёт ответ строками по ходу работы. `say` получает событие:
-    "received" — лимит пройден и работа пошла, дальше имена этапов.
+    {"stage": "received"} — лимит пройден и работа пошла, дальше этапы API.
     Без user_id у вопроса нет ни истории разговора, ни лимита."""
     body = {"question": question, "platform": "telegram"}
     if user_id is not None:
@@ -61,13 +77,13 @@ async def ask_api(question: str, user_id: int | None, say) -> str:
                 await r.aread()
                 return r.json().get("detail", "Слишком часто. Подожди немного.")
             r.raise_for_status()
-            await say("received")
+            await say({"stage": "received"})
             async for line in r.aiter_lines():
                 if not line.strip():
                     continue
                 event = json.loads(line)
                 if "stage" in event:
-                    await say(event["stage"])
+                    await say(event)
                 elif "answer" in event:
                     return event["answer"]
                 else:
@@ -102,8 +118,8 @@ async def main() -> None:
     async def question(msg: Message):
         lang = "uk" if msg.from_user.language_code == "uk" else "ru"
 
-        async def say(event: str):
-            text = PROCESSING[lang] if event == "received" else STAGES[lang].get(event)
+        async def say(event: dict):
+            text = stage_text(lang, event)
             if not text:
                 return  # незнакомый этап пропускаем
             try:

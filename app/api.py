@@ -131,6 +131,8 @@ def ask_stream(body: AskIn):
             for item in answer_mod.ask_steps(body.question, user_id=user_id, groups=body.groups):
                 if isinstance(item, str):
                     event = {"stage": item}
+                    if item == "threads":  # бот пишет «ищем по N обсуждениям»
+                        event["total"] = db.query("SELECT count(*) AS n FROM threads")[0]["n"]
                 else:
                     event = AskOut(answer=item.answer, sources=item.sources,
                                    facts_used=item.facts_used,
