@@ -5,18 +5,28 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import answer as answer_mod
 from app import config, db, llm, models_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast if the DB is unreachable at boot: raising aborts startup so the
+    # process exits non-zero and the orchestrator can replace the instance,
+    # rather than serving requests against a dead database.
     db.pool()
+    try:
+        db.query("SELECT 1 AS ok")
+    except Exception as e:
+        log.error("startup DB check failed, aborting: %s", e)
+        db.close_pool()
+        raise
     yield
     db.close_pool()
 
@@ -42,17 +52,25 @@ class AskOut(BaseModel):
 @app.get("/health")
 def health():
     out = {"status": "ok", "db": "?", "models": "?"}
+    db_ok = True
     try:
         db.query("SELECT 1 AS ok")
         out["db"] = "ok"
     except Exception as e:
+        log.warning("health check: DB unreachable: %s", e)
         out["db"] = f"error: {e}"
         out["status"] = "degraded"
+        db_ok = False
     try:
         out["models"] = models_client.health().get("status", "?")
     except Exception as e:
         out["models"] = f"error: {e}"
         out["status"] = "degraded"
+    # A dead DB makes the instance useless, so report 503: a health check can
+    # then mark it unhealthy and replace it. A degraded models service does not
+    # fail the check -- the API can still serve /health and recover.
+    if not db_ok:
+        return JSONResponse(out, status_code=503)
     return out
 
 
