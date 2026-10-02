@@ -6,6 +6,7 @@ docs/QUALITY.md: изменение остаётся, только если ме
 """
 import logging
 import os
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -44,9 +45,58 @@ def _i(name: str, default: int) -> int:
 
 
 # --- база -------------------------------------------------------------------
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://valencia:test@localhost:5432/valencia")
+_DB_LOCAL_DEFAULT = "postgresql://valencia:test@localhost:5432/valencia"
+
+
+# Required when composing the URL from discrete vars. DB_PORT/DB_NAME have safe
+# defaults and DB_SSLMODE is optional, so they are not in this list.
+_DB_REQUIRED = ("DB_USER", "DB_PASSWORD", "DB_HOST")
+
+
+def _database_url() -> str:
+    """Postgres connection string, by priority:
+
+    1. DATABASE_URL set and non-empty -> use as-is (local dev, docker-compose,
+       manual overrides).
+    2. Else, if any DB_* var is present -> compose from the discrete vars. Fail
+       fast if a required one is missing, so a misconfigured deployment stops
+       with a clear error instead of silently connecting elsewhere.
+    3. Else (nothing set) -> local default, for a bare dev machine.
+
+    DB_USER and DB_PASSWORD are URL-encoded (quote, safe=""): a password can
+    contain / @ : + = which otherwise break the connection string.
+    """
+    explicit = os.getenv("DATABASE_URL", "").strip()
+    if explicit:
+        return explicit
+
+    db_vars = {k: os.getenv(k, "").strip()
+               for k in ("DB_USER", "DB_PASSWORD", "DB_HOST", "DB_PORT", "DB_NAME", "DB_SSLMODE")}
+    if any(db_vars.values()):
+        missing = [k for k in _DB_REQUIRED if not db_vars[k]]
+        if missing:
+            raise RuntimeError(
+                "DB_* configuration is incomplete, missing: " + ", ".join(missing)
+                + ". Set these, or provide DATABASE_URL for local dev."
+            )
+        user = quote(db_vars["DB_USER"], safe="")
+        password = quote(db_vars["DB_PASSWORD"], safe="")
+        host = db_vars["DB_HOST"]
+        port = db_vars["DB_PORT"] or "5432"
+        name = db_vars["DB_NAME"] or "valencia"
+        sslmode = db_vars["DB_SSLMODE"] or "require"
+        return f"postgresql://{user}:{password}@{host}:{port}/{name}?sslmode={sslmode}"
+
+    return _DB_LOCAL_DEFAULT
+
+
+DATABASE_URL = _database_url()
 DB_POOL_MIN = _i("DB_POOL_MIN", 1)
 DB_POOL_MAX = _i("DB_POOL_MAX", 8)
+# Cap the connection/handshake wait so a stale credential or unreachable DB
+# fails fast (seconds) instead of hanging -- the health check must be able to
+# report a dead DB promptly.
+DB_CONNECT_TIMEOUT = _i("DB_CONNECT_TIMEOUT", 5)
 
 # --- модели на своём железе -------------------------------------------------
 MODELS_URL = os.getenv("MODELS_URL", "http://localhost:8081")

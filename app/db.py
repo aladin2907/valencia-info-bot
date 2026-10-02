@@ -17,7 +17,12 @@ def pool() -> ConnectionPool:
             config.DATABASE_URL,
             min_size=config.DB_POOL_MIN,
             max_size=config.DB_POOL_MAX,
-            kwargs={"row_factory": dict_row},
+            # timeout: max wait for a free pooled connection; connect_timeout:
+            # max wait for the TCP/auth handshake. Both bounded so a dead or
+            # stale-credential DB surfaces in seconds instead of hanging.
+            timeout=config.DB_CONNECT_TIMEOUT,
+            kwargs={"row_factory": dict_row,
+                    "connect_timeout": config.DB_CONNECT_TIMEOUT},
             open=True,
         )
         # без явного закрытия скрипты падают в трейсбек на выходе из интерпретатора
@@ -45,4 +50,5 @@ def execute(sql: str, params: tuple = ()) -> None:
 
 def connect() -> psycopg.Connection:
     """Отдельное соединение для долгих задач ingest — пул им занимать незачем."""
-    return psycopg.connect(config.DATABASE_URL, row_factory=dict_row)
+    return psycopg.connect(config.DATABASE_URL, row_factory=dict_row,
+                           connect_timeout=config.DB_CONNECT_TIMEOUT)
