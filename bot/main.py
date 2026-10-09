@@ -58,6 +58,18 @@ STAGES = {
            "web": "Checking the internet and official sources...",
            "compose": "Composing the answer..."},
 }
+# Rate-limit notice, built by the bot in the user's language. {m} = minutes.
+# The API returns retry_after_seconds; it no longer dictates the wording.
+RATE_LIMIT = {
+    "ru": "Следующий вопрос можно задать через {m} мин.",
+    "uk": "Наступне питання можна поставити через {m} хв.",
+    "en": "You can ask the next question in {m} min.",
+}
+
+
+def rate_limit_text(lang: str, retry_after_seconds: int) -> str:
+    minutes = max(1, -(-int(retry_after_seconds) // 60))  # ceil, at least 1
+    return RATE_LIMIT[lang].format(m=minutes)
 
 
 SUPPORTED_LANGS = ("ru", "uk", "en")
@@ -108,7 +120,7 @@ def stage_text(lang: str, event: dict) -> str | None:
     return STAGES[lang].get(stage)
 
 
-async def ask_api(question: str, user_id: int | None, say) -> str:
+async def ask_api(question: str, user_id: int | None, say, lang: str = DEFAULT_LANG) -> str:
     """Только текст ответа, как было в n8n. Ссылки на официальные сайты модель
     вставляет прямо в текст; треды из `sources` остаются для других клиентов.
 
@@ -122,7 +134,15 @@ async def ask_api(question: str, user_id: int | None, say) -> str:
         async with client.stream("POST", "/ask/stream", json=body) as r:
             if r.status_code == 429:
                 await r.aread()
-                return r.json().get("detail", "Слишком часто. Подожди немного.")
+                detail = r.json().get("detail")
+                # New contract: detail is {error, retry_after_seconds, message}.
+                # Build the text ourselves in the user's language; fall back to
+                # the API's message, then a generic line, for older responses.
+                if isinstance(detail, dict) and "retry_after_seconds" in detail:
+                    return rate_limit_text(lang, detail["retry_after_seconds"])
+                if isinstance(detail, dict):
+                    return detail.get("message") or RATE_LIMIT[lang].format(m=1)
+                return detail or RATE_LIMIT[lang].format(m=1)
             r.raise_for_status()
             await say({"stage": "received"})
             async for line in r.aiter_lines():
@@ -184,7 +204,7 @@ async def main() -> None:
 
         await bot.send_chat_action(msg.chat.id, "typing")
         try:
-            answer = await ask_api(msg.text, user_id, say)
+            answer = await ask_api(msg.text, user_id, say, lang)
         except Exception as e:
             log.warning("ask failed: %s", e)
             await msg.answer(BUSY[lang])
