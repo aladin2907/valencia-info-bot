@@ -20,19 +20,31 @@ from app import config
 
 log = logging.getLogger("bot")
 
-GREETING = (
-    "Привет! Я отвечаю на вопросы о жизни в Валенсии по обсуждениям в местных чатах: "
-    "школы, документы, врачи, аренда, быт.\n\n"
-    "Просто напиши вопрос своими словами."
-)
-BUSY = "Сервер сейчас занят, попробуй ещё раз через пару минут."
-# «processing» из наборов RU и UKR в n8n, дословно
+GREETING = {
+    "ru": "Привет! Я отвечаю на вопросы о жизни в Валенсии по обсуждениям в местных чатах: "
+          "школы, документы, врачи, аренда, быт.\n\n"
+          "Просто напиши вопрос своими словами.",
+    "uk": "Привіт! Я відповідаю на питання про життя у Валенсії за обговореннями в місцевих "
+          "чатах: школи, документи, лікарі, оренда, побут.\n\n"
+          "Просто напиши питання своїми словами.",
+    "en": "Hi! I answer questions about life in Valencia based on discussions in local chats: "
+          "schools, paperwork, doctors, renting, daily life.\n\n"
+          "Just write your question in your own words.",
+}
+BUSY = {
+    "ru": "Сервер сейчас занят, попробуй ещё раз через пару минут.",
+    "uk": "Сервер зараз зайнятий, спробуй ще раз за кілька хвилин.",
+    "en": "The server is busy right now, please try again in a couple of minutes.",
+}
+# «processing» из наборов RU и UKR в n8n, дословно; EN — в том же тоне
 PROCESSING = {
     "ru": "🤖 Ваш запрос получен. Запускаю интеллектуальный поиск и проверку данных — "
           "ответ будет готов примерно через 3 минуты. Благодарю за доверие.",
     "uk": "🤖 Привіт! Дякуємо, що ти з нами. Ми отримали твоє повідомлення, починаємо роботу "
           "над пошуком інформації, скоро повернемось із відповіддю. Час обробки твого "
           "запиту — 3 хвилини.",
+    "en": "🤖 Your request has been received. I'm starting an intelligent search and verifying "
+          "the data — the answer will be ready in about 3 minutes. Thank you for your trust.",
 }
 # этапы на тех же местах, что в n8n; тексты — владельца (в n8n были английские)
 STAGES = {
@@ -42,7 +54,21 @@ STAGES = {
     "uk": {"threads": "Шукаємо в обговореннях...",
            "web": "Перевіряємо в інтернеті та офіційних джерелах...",
            "compose": "Формуємо відповідь..."},
+    "en": {"threads": "Searching the discussions...",
+           "web": "Checking the internet and official sources...",
+           "compose": "Composing the answer..."},
 }
+
+
+SUPPORTED_LANGS = ("ru", "uk", "en")
+DEFAULT_LANG = "en"  # anything that isn't ru/uk falls back to English
+
+
+def _lang(language_code: str | None) -> str:
+    """Map Telegram's language_code to one of our supported languages.
+    ru -> ru, uk -> uk, en -> en; everything else -> English."""
+    code = (language_code or "").split("-")[0].lower()
+    return code if code in SUPPORTED_LANGS else DEFAULT_LANG
 
 
 def stage_text(lang: str, event: dict) -> str | None:
@@ -57,6 +83,8 @@ def stage_text(lang: str, event: dict) -> str | None:
         one = total % 10 == 1 and total % 100 != 11
         if lang == "uk":
             return f"Шукаємо серед {n} {'обговорення' if one else 'обговорень'} в групах Telegram..."
+        if lang == "en":
+            return f"Searching {n} {'discussion' if total == 1 else 'discussions'} in Telegram groups..."
         return f"Ищем по {n} {'обсуждению' if one else 'обсуждениям'} в группах Telegram..."
     return STAGES[lang].get(stage)
 
@@ -112,11 +140,11 @@ async def main() -> None:
 
     @dp.message(CommandStart())
     async def start(msg: Message):
-        await msg.answer(GREETING)
+        await msg.answer(GREETING[_lang(msg.from_user.language_code)])
 
     @dp.message(F.text & ~F.text.startswith("/"))
     async def question(msg: Message):
-        lang = "uk" if msg.from_user.language_code == "uk" else "ru"
+        lang = _lang(msg.from_user.language_code)
 
         async def say(event: dict):
             text = stage_text(lang, event)
@@ -137,7 +165,7 @@ async def main() -> None:
             answer = await ask_api(msg.text, user_id, say)
         except Exception as e:
             log.warning("ask failed: %s", e)
-            await msg.answer(BUSY)
+            await msg.answer(BUSY[lang])
             return
         await send_answer(msg, answer)
 
