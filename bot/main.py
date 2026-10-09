@@ -64,11 +64,30 @@ SUPPORTED_LANGS = ("ru", "uk", "en")
 DEFAULT_LANG = "en"  # anything that isn't ru/uk falls back to English
 
 
-def _lang(language_code: str | None) -> str:
-    """Map Telegram's language_code to one of our supported languages.
+# Ukrainian-specific Cyrillic letters: їієґ (and uppercase). Their presence
+# distinguishes Ukrainian from Russian without a language-detection dependency.
+_UK_LETTERS = set("їієґЇІЄҐ")
+
+
+def _lang_from_code(language_code: str | None) -> str:
+    """Fallback: map Telegram's language_code to a supported language.
     ru -> ru, uk -> uk, en -> en; everything else -> English."""
     code = (language_code or "").split("-")[0].lower()
     return code if code in SUPPORTED_LANGS else DEFAULT_LANG
+
+
+def detect_lang(text: str | None, language_code: str | None = None) -> str:
+    """Pick the service-message language from the MESSAGE TEXT so it matches the
+    language the answer comes back in. Cyrillic with Ukrainian-only letters ->
+    uk, other Cyrillic -> ru, Latin/other -> en. When the text carries no
+    letters (emoji, digits), fall back to Telegram's language_code."""
+    text = text or ""
+    has_cyrillic = any("\u0400" <= ch <= "\u04ff" for ch in text)
+    if has_cyrillic:
+        return "uk" if any(ch in _UK_LETTERS for ch in text) else "ru"
+    if any(ch.isalpha() for ch in text):
+        return "en"
+    return _lang_from_code(language_code)
 
 
 def stage_text(lang: str, event: dict) -> str | None:
@@ -140,11 +159,14 @@ async def main() -> None:
 
     @dp.message(CommandStart())
     async def start(msg: Message):
-        await msg.answer(GREETING[_lang(msg.from_user.language_code)])
+        # /start has no question text to detect from -> use Telegram's locale.
+        await msg.answer(GREETING[_lang_from_code(msg.from_user.language_code)])
 
     @dp.message(F.text & ~F.text.startswith("/"))
     async def question(msg: Message):
-        lang = _lang(msg.from_user.language_code)
+        # Detect from the question text so the service messages match the
+        # language the answer will come back in; language_code is the fallback.
+        lang = detect_lang(msg.text, msg.from_user.language_code)
 
         async def say(event: dict):
             text = stage_text(lang, event)
