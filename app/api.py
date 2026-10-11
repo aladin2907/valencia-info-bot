@@ -117,12 +117,21 @@ def _rate_limit(platform: str, external_id: str) -> tuple[int, int]:
 
 
 def _user(body: AskIn) -> int | None:
-    """Пользователь для журнала вопросов; лимит превышен — 429."""
+    """Пользователь для журнала вопросов; лимит превышен — 429.
+
+    На 429 возвращаем машиночитаемый detail с секундами ожидания: текст
+    сообщения клиент строит сам на языке пользователя. `message` оставлен для
+    простых клиентов, у бота он не используется."""
     if not body.user_id:
         return None
     user_id, wait = _rate_limit(body.platform, body.user_id)
     if wait:
-        raise HTTPException(429, f"Следующий вопрос можно задать через {-(-wait // 60)} мин.")
+        minutes = -(-wait // 60)  # ceil to whole minutes
+        raise HTTPException(429, {
+            "error": "rate_limited",
+            "retry_after_seconds": wait,
+            "message": f"Следующий вопрос можно задать через {minutes} мин.",
+        })
     return user_id
 
 
